@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: dia-replica-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dia_replica}
+      POSTGRES_USER: ${POSTGRES_USER:-dia_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dia_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dia_user} -d ${POSTGRES_DB:-dia_replica}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-HCL}
+    container_name: dia-replica-app
+    env_file:
+      - .env
+    environment:
+      API_DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://dia_user:dia_password@db:5432/dia_replica}
+      API_STORAGE_ROOT: /app/storage/uploads
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      API_RUN_SEED_ON_STARTUP: ${API_RUN_SEED_ON_STARTUP:-false}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - ./storage/uploads:/app/storage/uploads
+
+volumes:
+  postgres_data:

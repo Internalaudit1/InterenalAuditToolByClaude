@@ -1,0 +1,18 @@
+import { clsx, type ClassValue } from "clsx";
+
+export function cn(...inputs: ClassValue[]) {
+  return clsx(inputs);
+}
+
+export function formatDate(value?: string | null) {
+  if (!value) return "--";
+  return new Date(value).toLocaleDateString();
+}
+
+export function titleCase(value: string) {
+  return value
+    .split(/[-_ ]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
