@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -55,6 +55,36 @@ def _permission_response(permission) -> PermissionResponse:
     )
 
 
+def _user_response(user) -> UserResponse:
+    return UserResponse(
+        **{
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "phone": user.phone,
+            "designation_id": user.designation_id,
+            "company_id": user.company_id,
+            "location_id": user.location_id,
+            "is_active": user.is_active,
+            "last_login_at": user.last_login_at,
+            "role_codes": [link.role.code for link in user.role_links],
+            "designation_title": user.designation.title if user.designation else None,
+            "company_name": user.company.name if user.company else None,
+            "location_label": (
+                " - ".join(part for part in [user.location.location_code, user.location.description] if part)
+                if user.location
+                else None
+            ),
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+            "created_by": user.created_by,
+            "updated_by": user.updated_by,
+            "is_deleted": user.is_deleted,
+        }
+    )
+
+
 @router.get("/activity-logs")
 def list_activity_logs(
     query: Annotated[ListQuery, Depends(get_list_query)],
@@ -77,33 +107,28 @@ def list_notifications(
 
 @router.get("/users", response_model=list[UserResponse])
 def list_users(
+    q: str | None = Query(None),
+    role: str | None = Query(None),
+    roles: str | None = Query(None),
+    active_only: bool = Query(False),
+    company_id: int | None = Query(None),
+    location_id: int | None = Query(None),
+    page_size: int | None = Query(None, ge=1, le=200),
     _: CurrentUser = Depends(require_permissions("users:view")),
     db: Session = Depends(get_db),
 ):
-    users = user_service.list_users(db)
-    return [
-        UserResponse(
-            **{
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "full_name": user.full_name,
-                "phone": user.phone,
-                "designation_id": user.designation_id,
-                "company_id": user.company_id,
-                "location_id": user.location_id,
-                "is_active": user.is_active,
-                "last_login_at": user.last_login_at,
-                "role_codes": [link.role.code for link in user.role_links],
-                "created_at": user.created_at,
-                "updated_at": user.updated_at,
-                "created_by": user.created_by,
-                "updated_by": user.updated_by,
-                "is_deleted": user.is_deleted,
-            }
-        )
-        for user in users
-    ]
+    role_codes = [code.strip() for code in roles.split(",")] if roles else None
+    users = user_service.list_users(
+        db,
+        q=q,
+        role=role,
+        roles=role_codes,
+        active_only=active_only,
+        company_id=company_id,
+        location_id=location_id,
+        page_size=page_size,
+    )
+    return [_user_response(user) for user in users]
 
 
 @router.post("/users", response_model=UserResponse)
@@ -115,26 +140,7 @@ def create_user(
     user = user_service.create_user(db, payload, current_user.full_name, current_user.role_codes)
     db.commit()
     db.refresh(user)
-    return UserResponse(
-        **{
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "full_name": user.full_name,
-            "phone": user.phone,
-            "designation_id": user.designation_id,
-            "company_id": user.company_id,
-            "location_id": user.location_id,
-            "is_active": user.is_active,
-            "last_login_at": user.last_login_at,
-            "role_codes": [link.role.code for link in user.role_links],
-            "created_at": user.created_at,
-            "updated_at": user.updated_at,
-            "created_by": user.created_by,
-            "updated_by": user.updated_by,
-            "is_deleted": user.is_deleted,
-        }
-    )
+    return _user_response(user)
 
 
 @router.put("/users/{user_id}", response_model=UserResponse)
@@ -147,26 +153,7 @@ def update_user(
     user = user_service.update_user(db, user_id, payload, current_user.full_name)
     db.commit()
     db.refresh(user)
-    return UserResponse(
-        **{
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "full_name": user.full_name,
-            "phone": user.phone,
-            "designation_id": user.designation_id,
-            "company_id": user.company_id,
-            "location_id": user.location_id,
-            "is_active": user.is_active,
-            "last_login_at": user.last_login_at,
-            "role_codes": [link.role.code for link in user.role_links],
-            "created_at": user.created_at,
-            "updated_at": user.updated_at,
-            "created_by": user.created_by,
-            "updated_by": user.updated_by,
-            "is_deleted": user.is_deleted,
-        }
-    )
+    return _user_response(user)
 
 
 @router.put("/users/{user_id}/roles", response_model=UserResponse)
@@ -179,26 +166,7 @@ def update_user_roles(
     user = user_service.update_roles(db, user_id, payload.role_codes, current_user.full_name, current_user.role_codes, current_user.id)
     db.commit()
     db.refresh(user)
-    return UserResponse(
-        **{
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "full_name": user.full_name,
-            "phone": user.phone,
-            "designation_id": user.designation_id,
-            "company_id": user.company_id,
-            "location_id": user.location_id,
-            "is_active": user.is_active,
-            "last_login_at": user.last_login_at,
-            "role_codes": [link.role.code for link in user.role_links],
-            "created_at": user.created_at,
-            "updated_at": user.updated_at,
-            "created_by": user.created_by,
-            "updated_by": user.updated_by,
-            "is_deleted": user.is_deleted,
-        }
-    )
+    return _user_response(user)
 
 
 @router.get("/permissions", response_model=list[PermissionResponse])

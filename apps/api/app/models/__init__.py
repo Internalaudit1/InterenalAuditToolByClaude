@@ -1,8 +1,10 @@
 from app.models.action_plan import ActionPlan, ActionPlanRevision
-from app.models.audit import Audit, AuditPlan, BusinessInitiative, ERMRisk, OverallAssessment, ProcessRiskMapping
+from app.models.audit import Audit, AuditActivity, AuditEvent, AuditMembership, AuditPlan, BusinessInitiative, ERMRisk, Observation, OverallAssessment, ProcessRiskMapping
+from app.models.engagement import EngagementDocument, EngagementKickoffChecklist, EngagementPlan, EngagementResource
 from app.models.auth import Permission, RefreshToken, Role, User, UserRole
 from app.models.master import (
     AuditEscalation,
+    Auditee,
     City,
     Company,
     ControlPerformanceIndicator,
@@ -22,7 +24,8 @@ from app.models.master import (
     TrialBalance,
 )
 from app.models.reference_counter import BusinessReferenceCounter
-from app.models.support import ActivityLog, Attachment, KnowledgeLibraryItem, ManagementReview, Notification
+from app.models.support import ActivityLog, Attachment, KnowledgeLibraryItem, ManagementReview, Notification, NotificationOutbox
+from app.models.workpaper import EvidenceLink, EvidenceRegister, Workpaper, WorkpaperReview, WorkpaperVersion
 
 __all__ = [
     "ActionPlan",
@@ -30,7 +33,11 @@ __all__ = [
     "ActivityLog",
     "Attachment",
     "Audit",
+    "AuditActivity",
     "AuditEscalation",
+    "Auditee",
+    "AuditEvent",
+    "AuditMembership",
     "AuditPlan",
     "BusinessInitiative",
     "BusinessReferenceCounter",
@@ -39,12 +46,20 @@ __all__ = [
     "ControlPerformanceIndicator",
     "Country",
     "Designation",
+    "EngagementDocument",
+    "EngagementKickoffChecklist",
+    "EngagementPlan",
+    "EngagementResource",
     "ERMRisk",
+    "EvidenceLink",
+    "EvidenceRegister",
     "Impact",
     "KnowledgeLibraryItem",
     "Location",
     "ManagementReview",
     "Notification",
+    "NotificationOutbox",
+    "Observation",
     "ObservationGrading",
     "OverallAssessment",
     "Permission",
@@ -62,4 +77,7 @@ __all__ = [
     "TrialBalance",
     "User",
     "UserRole",
+    "Workpaper",
+    "WorkpaperReview",
+    "WorkpaperVersion",
 ]

@@ -19,12 +19,27 @@ type PageConfig = {
 };
 
 const periodTypeOptions = [
+  { label: "Monthly", value: "Monthly" },
   { label: "Quarterly", value: "Quarterly" },
   { label: "Half-Yearly", value: "Half-Yearly" },
   { label: "Annual", value: "Annual" }
 ];
 
 const periodValueOptions = {
+  Monthly: [
+    { label: "January", value: "January" },
+    { label: "February", value: "February" },
+    { label: "March", value: "March" },
+    { label: "April", value: "April" },
+    { label: "May", value: "May" },
+    { label: "June", value: "June" },
+    { label: "July", value: "July" },
+    { label: "August", value: "August" },
+    { label: "September", value: "September" },
+    { label: "October", value: "October" },
+    { label: "November", value: "November" },
+    { label: "December", value: "December" }
+  ],
   Quarterly: [
     { label: "Q1", value: "Q1" },
     { label: "Q2", value: "Q2" },
@@ -166,7 +181,49 @@ export const planningPageConfig: Record<string, PageConfig> = {
       { name: "fiscal_year", label: "Fiscal Year", type: "select", options: fiscalYearOptions },
       { name: "start_date", label: "Start Date", type: "date" },
       { name: "end_date", label: "End Date", type: "date" },
-      { name: "criticality", label: "Criticality" }
+      { name: "criticality", label: "Criticality" },
+      {
+        name: "audit_owner_id",
+        label: "Lead Auditor",
+        type: "lookup",
+        displayField: "audit_owner_name",
+        lookup: {
+          endpoint: "/admin/users",
+          queryParam: "q",
+          minChars: 3,
+          labelField: "full_name",
+          descriptionFields: ["designation_title", "company_name", "location_label"],
+          staticParams: { active_only: true, roles: "super_admin,head_auditor,auditor" }
+        }
+      },
+      {
+        name: "junior_auditor_1_id",
+        label: "Junior Auditor 1",
+        type: "lookup",
+        displayField: "junior_auditor_1_name",
+        lookup: {
+          endpoint: "/admin/users",
+          queryParam: "q",
+          minChars: 3,
+          labelField: "full_name",
+          descriptionFields: ["designation_title", "company_name", "location_label"],
+          staticParams: { active_only: true, roles: "super_admin,head_auditor,auditor,junior_auditor" }
+        }
+      },
+      {
+        name: "junior_auditor_2_id",
+        label: "Junior Auditor 2",
+        type: "lookup",
+        displayField: "junior_auditor_2_name",
+        lookup: {
+          endpoint: "/admin/users",
+          queryParam: "q",
+          minChars: 3,
+          labelField: "full_name",
+          descriptionFields: ["designation_title", "company_name", "location_label"],
+          staticParams: { active_only: true, roles: "super_admin,head_auditor,auditor,junior_auditor" }
+        }
+      }
     ],
     columns: [
       { accessorKey: "audit_number", header: "Audit Number" },
@@ -174,7 +231,11 @@ export const planningPageConfig: Record<string, PageConfig> = {
       { accessorKey: "period_type", header: "Period Type" },
       { accessorKey: "period_value", header: "Period Value" },
       { accessorKey: "fiscal_year", header: "FY" },
-      { accessorKey: "criticality", header: "Criticality" }
+      { accessorKey: "criticality", header: "Criticality" },
+      { accessorKey: "audit_owner_name", header: "Lead Auditor" },
+      { accessorKey: "junior_auditor_1_name", header: "Junior Auditor 1" },
+      { accessorKey: "junior_auditor_2_name", header: "Junior Auditor 2" },
+      { accessorKey: "approval_status", header: "Approval Status" }
     ]
   }
 };
@@ -254,6 +315,7 @@ export const masterPageConfig: Record<string, PageConfig> = {
     createEnabled: true,
     editPermission: "masters:manage",
     deletePermission: "masters:delete",
+    importResource: "companies",
     fields: [
       { name: "name", label: "Company Name" },
       { name: "country_id", label: "Country" },
@@ -296,19 +358,19 @@ export const masterPageConfig: Record<string, PageConfig> = {
   locations: {
     title: "Location Master",
     eyebrow: "Master Data",
-    description: "Maintain profit centers, sector tags, and risk index by location.",
+    description: "Maintain location records, sector tags, and risk index by location.",
     endpoint: "/master/locations",
     tableName: "locations",
     createEnabled: true,
     editPermission: "masters:manage",
     deletePermission: "masters:delete",
+    importResource: "locations",
     fields: [
       { name: "sector", label: "Sector" },
       { name: "country_id", label: "Country" },
       { name: "state_id", label: "State" },
       { name: "city_id", label: "City" },
-      { name: "company_id", label: "Company ID" },
-      { name: "profit_center_code", label: "Profit Center Code" },
+      { name: "company_id", label: "Company" },
       { name: "location_code", label: "Location Code" },
       { name: "risk_index", label: "Risk Index" },
       { name: "description", label: "Description" }
@@ -329,14 +391,14 @@ export const masterPageConfig: Record<string, PageConfig> = {
     createEnabled: true,
     editPermission: "masters:manage",
     deletePermission: "masters:delete",
+    importResource: "process-location-mappings",
     fields: [
       { name: "code", label: "Code" },
       { name: "audit_name", label: "Audit Name" },
-      { name: "process_id", label: "Process ID" },
-      { name: "location_id", label: "Location ID" },
-      { name: "company_id", label: "Company ID" },
-      { name: "profit_center_code", label: "Profit Center Code" },
-      { name: "trial_balance_id", label: "Trial Balance ID" }
+      { name: "process_id", label: "Process" },
+      { name: "location_id", label: "Location" },
+      { name: "company_id", label: "Company" },
+      { name: "trial_balance_id", label: "Trial Balance" }
     ],
     columns: [
       { accessorKey: "code", header: "Code" },
@@ -448,7 +510,8 @@ export const masterPageConfig: Record<string, PageConfig> = {
     tableName: "trial_balances",
     createEnabled: true,
     editPermission: "masters:manage",
-    deletePermission: "masters:delete"
+    deletePermission: "masters:delete",
+    importResource: "trial-balances"
   },
   "audit-escalations": {
     title: "Audit Escalations",
@@ -472,6 +535,47 @@ export const masterPageConfig: Record<string, PageConfig> = {
     deletePermission: "masters:delete",
     importResource: "designations"
   },
+  auditees: {
+    title: "Auditee Master",
+    eyebrow: "Master Data",
+    description: "Maintain auditee contacts and optionally link them to portal users for response workflows.",
+    endpoint: "/master/auditees",
+    tableName: "auditees",
+    createEnabled: true,
+    editPermission: "masters:manage",
+    deletePermission: "masters:delete",
+    fields: [
+      { name: "auditee_code", label: "Auditee Code" },
+      { name: "full_name", label: "Full Name" },
+      { name: "email", label: "Email" },
+      { name: "phone", label: "Phone" },
+      { name: "designation", label: "Designation" },
+      { name: "department", label: "Department" },
+      { name: "company_id", label: "Company" },
+      { name: "location_id", label: "Location" },
+      {
+        name: "linked_user_id",
+        label: "Linked Portal User",
+        type: "lookup",
+        displayField: "linked_user_name",
+        lookup: {
+          endpoint: "/admin/users",
+          queryParam: "q",
+          minChars: 3,
+          labelField: "full_name",
+          descriptionFields: ["designation_title", "company_name", "location_label"],
+          staticParams: { active_only: true, role: "auditee" }
+        }
+      }
+    ],
+    columns: [
+      { accessorKey: "auditee_code", header: "Code" },
+      { accessorKey: "full_name", header: "Name" },
+      { accessorKey: "email", header: "Email" },
+      { accessorKey: "designation", header: "Designation" },
+      { accessorKey: "department", header: "Department" }
+    ]
+  },
   "control-performance-indicators": {
     title: "Control Performance Indicators",
     eyebrow: "Master Data",
@@ -491,7 +595,8 @@ export const masterPageConfig: Record<string, PageConfig> = {
     tableName: "task_swap_rules",
     createEnabled: true,
     editPermission: "masters:manage",
-    deletePermission: "masters:delete"
+    deletePermission: "masters:delete",
+    importResource: "task-swaps"
   }
 };
 

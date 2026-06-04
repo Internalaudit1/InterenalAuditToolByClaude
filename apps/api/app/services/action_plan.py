@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, asc, case, desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.api.deps.auth import CurrentUser
 from app.core.enums import ActionPlanStatus, ActivityAction, AttachmentOwnerType, RoleCode
 from app.core.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.action_plan import ActionPlan, ActionPlanRevision
+from app.models.audit import Audit
 from app.models.support import Attachment
 from app.repositories.base import BaseRepository
 from app.schemas.action_plan import (
@@ -20,6 +22,7 @@ from app.schemas.action_plan import (
 )
 from app.schemas.common import BlockedDeleteItem, BulkDeleteResponse, ListQuery, PaginationMeta, PaginatedResponse
 from app.services.activity_log import activity_log_service
+from app.services.audit_scope import apply_audit_scope, assert_can_see_audit, has_global_audit_visibility
 from app.utils.serialization import model_to_dict
 
 
@@ -59,20 +62,40 @@ class ActionPlanService:
         ActionPlanStatus.COMPLETED.value: set(),
     }
 
-    def list(self, db: Session, query: ListQuery) -> PaginatedResponse[ActionPlan]:
-        items, total = self.repo.list(
-            db,
-            page=query.page,
-            page_size=query.page_size,
-            search=query.search,
-            search_fields=["action_plan_id", "audit_number", "observation_heading", "auditor_status", "auditee_status"],
-            filters=query.filters,
-            sort_by=query.sort_by,
-            sort_order=query.sort_order,
-        )
+    def list(self, db: Session, query: ListQuery, current_user: CurrentUser | None = None) -> PaginatedResponse[ActionPlan]:
+        stmt = select(ActionPlan).join(Audit, Audit.id == ActionPlan.audit_id).where(ActionPlan.is_deleted.is_(False), Audit.is_deleted.is_(False))
+        if current_user:
+            if RoleCode.AUDITEE.value in current_user.role_codes and not has_global_audit_visibility(current_user):
+                stmt = stmt.where(ActionPlan.implementation_owner_user_id == current_user.id)
+            else:
+                stmt = apply_audit_scope(stmt, current_user, Audit)
+        if query.filters:
+            for field, value in query.filters.items():
+                if value in (None, "", []):
+                    continue
+                if hasattr(ActionPlan, field):
+                    stmt = stmt.where(getattr(ActionPlan, field) == value)
+        if query.search:
+            stmt = stmt.where(
+                or_(
+                    ActionPlan.action_plan_id.ilike(f"%{query.search}%"),
+                    ActionPlan.audit_number.ilike(f"%{query.search}%"),
+                    ActionPlan.observation_heading.ilike(f"%{query.search}%"),
+                    ActionPlan.auditor_status.ilike(f"%{query.search}%"),
+                    ActionPlan.auditee_status.ilike(f"%{query.search}%"),
+                )
+            )
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        if query.sort_by and hasattr(ActionPlan, query.sort_by):
+            sort_column = getattr(ActionPlan, query.sort_by)
+            stmt = stmt.order_by(desc(sort_column) if query.sort_order == "desc" else asc(sort_column))
+        else:
+            stmt = stmt.order_by(desc(ActionPlan.updated_at))
+        stmt = stmt.offset((query.page - 1) * query.page_size).limit(query.page_size)
+        items = list(db.scalars(stmt).all())
         return PaginatedResponse(items=items, meta=PaginationMeta(page=query.page, page_size=query.page_size, total=total))
 
-    def get(self, db: Session, action_plan_id: int) -> ActionPlan:
+    def get(self, db: Session, action_plan_id: int, current_user: CurrentUser | None = None) -> ActionPlan:
         stmt = (
             select(ActionPlan)
             .options(joinedload(ActionPlan.revisions))
@@ -81,6 +104,11 @@ class ActionPlanService:
         action_plan = db.execute(stmt).unique().scalar_one_or_none()
         if not action_plan:
             raise NotFoundException("Action plan not found.")
+        if current_user and RoleCode.AUDITEE.value in current_user.role_codes and not has_global_audit_visibility(current_user):
+            if action_plan.implementation_owner_user_id != current_user.id:
+                raise NotFoundException("Action plan not found.")
+        elif current_user:
+            assert_can_see_audit(db, action_plan.audit_id, current_user)
         return action_plan
 
     def create(self, db: Session, payload: ActionPlanCreate, actor_name: str, actor_id: int | None) -> ActionPlan:

@@ -27,6 +27,8 @@ class AuthenticatedUser(BaseModel):
     username: str
     email: EmailStr
     full_name: str
+    company_id: int | None = None
+    location_id: int | None = None
     roles: list[str]
     permissions: list[str]
     last_login_at: datetime | None = None
@@ -35,4 +37,3 @@ class AuthenticatedUser(BaseModel):
 class LoginAuditResponse(BaseModel):
     success: bool
     user: AuthenticatedUser
-

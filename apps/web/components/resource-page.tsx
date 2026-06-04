@@ -4,7 +4,9 @@ import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { AsyncLookupField } from "@/components/forms/async-lookup";
 import { DataTable } from "@/components/table/data-table";
+import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { PageShell } from "@/components/layout/page-shell";
 import { MasterImportPanel } from "@/components/master-import-panel";
 import { apiFetch } from "@/lib/api";
@@ -14,8 +16,18 @@ import { accessorKeysFromColumns, buildMetadataColumns, coerceFormValue, labelFo
 export type ResourceField = {
   name: string;
   label: string;
-  type?: "text" | "textarea" | "date" | "select" | "checkbox" | "number";
+  type?: "text" | "textarea" | "date" | "select" | "checkbox" | "number" | "lookup";
   options?: { label: string; value: string | number }[];
+  lookup?: {
+    endpoint: string;
+    queryParam?: string;
+    minChars?: number;
+    valueField?: string;
+    labelField?: string;
+    descriptionFields?: string[];
+    staticParams?: Record<string, string | number | boolean>;
+  };
+  displayField?: string;
   dependsOn?: string;
   optionsByParent?: Record<string, { label: string; value: string | number }[]>;
   disabledPlaceholder?: string;
@@ -251,6 +263,10 @@ export function ResourcePage({
   function handleEdit(row: Record<string, unknown>) {
     const nextForm = resolvedFields.reduce<Record<string, unknown>>((payload, field) => {
       payload[field.name] = row[field.name] ?? "";
+      if (field.type === "lookup") {
+        const displayField = field.displayField ?? `${field.name.replace(/_id$/, "")}_name`;
+        payload[`${field.name}__label`] = row[displayField] ?? "";
+      }
       return payload;
     }, {});
     setEditingItem(row);
@@ -317,9 +333,38 @@ export function ResourcePage({
     }
   }
 
+  async function handleAuditPlanWorkflow(row: Record<string, unknown>, action: "submit" | "approve" | "defer" | "cancel" | "initiate") {
+    const id = Number(row.id);
+    if (!id) return;
+    const actionPath = action === "submit"
+      ? "submit-for-approval"
+      : action === "initiate"
+        ? "initiate-audit"
+        : action;
+    const body = JSON.stringify({});
+    try {
+      await apiFetch(`/planning/audit-plans/${id}/${actionPath}`, { method: "POST", body });
+      setSuccess(action === "initiate" ? "Audit initiated from approved plan." : "Audit plan workflow updated.");
+      setError("");
+      await load();
+    } catch (err) {
+      setSuccess("");
+      setError((err as Error).message);
+    }
+  }
+
   function buildSubmitPayload(source: Record<string, unknown>) {
     return resolvedFields.reduce<Record<string, unknown>>((payload, field) => {
-      const value = coerceFormValue(source[field.name], metadataByName[field.name]);
+      const column = metadataByName[field.name];
+      if (field.type === "lookup" && !column) {
+        payload[field.name] = source[field.name] === "" || source[field.name] === undefined ? null : Number(source[field.name]);
+        return payload;
+      }
+      if ((source[field.name] === "" || source[field.name] === undefined) && column?.nullable && column.lookup) {
+        payload[field.name] = null;
+        return payload;
+      }
+      const value = coerceFormValue(source[field.name], column);
       if (value !== undefined) {
         payload[field.name] = value;
       }
@@ -390,13 +435,13 @@ export function ResourcePage({
       <label key={field.name} className="space-y-2 text-sm font-semibold">
         <span>{field.label}</span>
         {field.type === "textarea" ? (
-          <textarea
-            className="field min-h-28"
+          <RichTextEditor
             value={String(values[field.name] ?? "")}
-            onChange={(event) => {
-              const value = event.target.value;
-              setValues((prev) => ({ ...prev, [field.name]: value }));
+            onChange={(nextValue) => {
+              setValues((prev) => ({ ...prev, [field.name]: nextValue }));
             }}
+            placeholder={`Enter ${field.label}`}
+            minHeightClass="min-h-28"
           />
         ) : field.type === "select" ? (
           <select
@@ -415,6 +460,42 @@ export function ResourcePage({
               </option>
             ))}
           </select>
+        ) : field.type === "lookup" && field.lookup ? (
+          <AsyncLookupField
+            value={values[field.name] as string | number | null | undefined}
+            selectedLabel={String(values[`${field.name}__label`] ?? "") || undefined}
+            endpoint={field.lookup.endpoint}
+            queryParam={field.lookup.queryParam}
+            minChars={field.lookup.minChars}
+            placeholder={`Search ${field.label}`}
+            staticParams={field.lookup.staticParams}
+            mapOption={(row) => {
+              const valueField = field.lookup?.valueField ?? "id";
+              const rawValue = row[valueField];
+              if (rawValue === undefined || rawValue === null || rawValue === "") return null;
+              const primaryLabelField = field.lookup?.labelField;
+              const label = String(
+                (primaryLabelField ? row[primaryLabelField] : undefined)
+                ?? row.full_name
+                ?? row.name
+                ?? row.title
+                ?? row.username
+                ?? row.location_label
+                ?? row.location_code
+                ?? row.auditee_code
+                ?? rawValue
+              );
+              const description = field.lookup?.descriptionFields?.map((key) => row[key]).filter(Boolean).join(" - ") ?? null;
+              return { value: rawValue as string | number, label, description };
+            }}
+            onSelect={(option) => {
+              setValues((prev) => {
+                const next = applyFieldChange(prev, field.name, option?.value ?? "");
+                next[`${field.name}__label`] = option?.label ?? "";
+                return next;
+              });
+            }}
+          />
         ) : field.type === "checkbox" ? (
           <span className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-sand bg-white px-4">
             <input
@@ -464,12 +545,12 @@ export function ResourcePage({
     >
       {canImport && importResource ? <MasterImportPanel resource={importResource} onImported={load} /> : null}
       {createEnabled && role !== "auditee" ? (
-        <section className="panel p-6">
-          <h2 className="font-serif text-2xl">Create Record</h2>
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="panel p-4 xl:p-5">
+          <h2 className="font-serif text-xl xl:text-2xl">Create Record</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {resolvedFields.map((field) => renderField(field, form, setForm))}
           </div>
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               className="button-primary"
               onClick={async () => {
@@ -493,12 +574,12 @@ export function ResourcePage({
             >
               Save
             </button>
-            <p className="text-sm text-slate">Assumed design: bulk import/sample templates are represented via backend-ready APIs and documentation, while the demo UI focuses on direct record entry.</p>
+            <p className="text-sm text-slate">Fill the required fields, then save. Optional dropdowns can be left blank.</p>
           </div>
         </section>
       ) : null}
       {editingItem ? (
-        <section className="panel p-6">
+        <section className="panel p-4 xl:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate">Edit Record</p>
@@ -515,10 +596,10 @@ export function ResourcePage({
               Cancel
             </button>
           </div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {resolvedFields.map((field) => renderField(field, editForm, setEditForm))}
           </div>
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-3">
             <button type="button" className="button-primary" onClick={handleEditSubmit}>
               Save Changes
             </button>
@@ -542,8 +623,31 @@ export function ResourcePage({
             </button>
           </div>
         ) : undefined}
-        renderRowActions={canEdit || canDelete ? (row) => (
+        renderRowActions={canEdit || canDelete || tableName === "audit_plans" ? (row) => (
           <div className="flex flex-wrap gap-2">
+            {tableName === "audit_plans" && row.approval_status === "Draft" && hasPermission("planning:manage") ? (
+              <button type="button" className="button-secondary px-4 py-2" onClick={() => handleAuditPlanWorkflow(row, "submit")}>
+                Submit
+              </button>
+            ) : null}
+            {tableName === "audit_plans" && row.approval_status === "Under Review" && hasPermission("planning:approve") ? (
+              <>
+                <button type="button" className="button-secondary px-4 py-2" onClick={() => handleAuditPlanWorkflow(row, "approve")}>
+                  Approve
+                </button>
+                <button type="button" className="button-secondary px-4 py-2" onClick={() => handleAuditPlanWorkflow(row, "defer")}>
+                  Defer
+                </button>
+                <button type="button" className="button-danger" onClick={() => handleAuditPlanWorkflow(row, "cancel")}>
+                  Cancel
+                </button>
+              </>
+            ) : null}
+            {tableName === "audit_plans" && row.approval_status === "Approved" && hasPermission("planning:approve") ? (
+              <button type="button" className="button-secondary px-4 py-2" onClick={() => handleAuditPlanWorkflow(row, "initiate")}>
+                Initiate Audit
+              </button>
+            ) : null}
             {canEdit ? (
               <button type="button" className="button-secondary px-4 py-2" onClick={() => handleEdit(row)}>
                 Edit

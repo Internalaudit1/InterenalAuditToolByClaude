@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 export function Sidebar({ permissions }: { permissions: string[] }) {
   const pathname = usePathname();
   const items = useMemo(() => visibleNavItems(permissions), [permissions]);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   function visibleChildren(item: NavItem) {
     return item.children ?? [];
@@ -26,29 +26,22 @@ export function Sidebar({ permissions }: { permissions: string[] }) {
   }
 
   useEffect(() => {
-    setOpenGroups((previous) => {
-      const next = { ...previous };
-      items.forEach((item) => {
-        if (visibleChildren(item).length && isItemActive(item)) {
-          next[item.href] = true;
-        }
-      });
-      return next;
-    });
+    const activeGroup = items.find((item) => visibleChildren(item).length && isItemActive(item));
+    setOpenGroup(activeGroup?.href ?? null);
   }, [items, pathname]);
 
   return (
-    <aside className="panel flex h-full w-full max-w-xs flex-col gap-4 p-5">
-      <div>
+    <aside className="panel flex h-fit min-w-0 flex-col gap-3 overflow-hidden p-3 transition-[height] duration-200 lg:sticky lg:top-4 xl:p-4 2xl:top-6">
+      <div className="shrink-0">
         <HclLogo subtitle="Internal Audit" labelClassName="font-semibold text-ink" />
-        <h1 className="mt-3 font-serif text-2xl">Operational Command</h1>
-        <p className="mt-2 text-sm text-slate">Planning, remediation, reporting, and control intelligence in one workspace.</p>
+        <h1 className="mt-3 font-serif text-lg leading-tight xl:text-xl 2xl:text-2xl">Operational Command</h1>
+        <p className="mt-2 text-xs leading-5 text-slate 2xl:text-sm">Planning, remediation, reporting, and control intelligence in one workspace.</p>
       </div>
-      <nav className="space-y-2">
+      <nav className="min-h-0 space-y-2 pr-1">
         {items.map((item) => {
           const children = visibleChildren(item);
           const hasChildren = children.length > 0;
-          const isOpen = Boolean(openGroups[item.href]);
+          const isOpen = openGroup === item.href;
           const active = isItemActive(item);
           const activeChild = isChildActive(item);
 
@@ -57,8 +50,9 @@ export function Sidebar({ permissions }: { permissions: string[] }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setOpenGroup(null)}
                 className={cn(
-                  "block rounded-2xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ink/30",
+                  "block rounded-2xl px-3 py-2 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-ink/30 xl:text-sm",
                   active ? "bg-ink text-white" : "bg-white/70 text-ink hover:bg-sand"
                 )}
               >
@@ -72,9 +66,9 @@ export function Sidebar({ permissions }: { permissions: string[] }) {
               <button
                 type="button"
                 aria-expanded={isOpen}
-                onClick={() => setOpenGroups((previous) => ({ ...previous, [item.href]: !previous[item.href] }))}
+                onClick={() => setOpenGroup((previous) => (previous === item.href ? null : item.href))}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ink/30",
+                  "flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-ink/30 xl:text-sm",
                   active || activeChild ? "bg-ink text-white" : "bg-white/70 text-ink hover:bg-sand"
                 )}
               >
@@ -92,8 +86,9 @@ export function Sidebar({ permissions }: { permissions: string[] }) {
                     <Link
                       key={child.href}
                       href={child.href}
+                      onClick={() => setOpenGroup(item.href)}
                       className={cn(
-                        "ml-3 block rounded-xl px-4 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-ink/20",
+                        "ml-2 block rounded-xl px-3 py-1.5 text-xs leading-5 transition focus:outline-none focus:ring-2 focus:ring-ink/20 xl:ml-3 xl:text-sm",
                         pathname.startsWith(child.href) ? "bg-sand text-ink" : "text-slate hover:bg-white/60"
                       )}
                     >

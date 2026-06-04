@@ -4,10 +4,25 @@
 
 :root {
   color-scheme: light;
+  --font-manrope: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-plex-serif: Georgia, "Times New Roman", serif;
 }
 
 body {
   @apply bg-mesh min-h-screen text-ink antialiased;
+  font-family: var(--font-manrope);
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 * {
@@ -24,17 +39,103 @@ body {
 }
 
 .field {
-  @apply w-full rounded-2xl border border-sand bg-cream px-4 py-3 text-sm text-ink outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20;
+  @apply min-h-11 w-full rounded-2xl border border-sand bg-cream px-4 py-2.5 text-sm text-ink outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20;
 }
 
 .button-primary {
-  @apply inline-flex items-center justify-center rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-ember;
+  @apply inline-flex min-h-11 items-center justify-center rounded-2xl bg-ink px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-ember disabled:cursor-not-allowed disabled:opacity-60;
 }
 
 .button-secondary {
-  @apply inline-flex items-center justify-center rounded-2xl border border-sand bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:border-ember hover:text-ember;
+  @apply inline-flex min-h-11 items-center justify-center rounded-2xl border border-sand bg-white px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-ember hover:text-ember disabled:cursor-not-allowed disabled:opacity-60;
 }
 
 .button-danger {
-  @apply inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100;
+  @apply inline-flex min-h-10 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.rich-editor {
+  @apply space-y-2;
+}
+
+.rich-editor__toolbar {
+  @apply flex flex-wrap gap-2 rounded-2xl border border-sand bg-white/80 p-2;
+}
+
+.rich-editor__toolbar-button {
+  @apply inline-flex min-h-9 items-center justify-center rounded-xl border border-sand bg-cream px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-ember hover:text-ember;
+}
+
+.rich-editor__surface {
+  @apply min-h-[7rem] overflow-y-auto whitespace-normal break-words;
+}
+
+.rich-editor__surface[contenteditable="true"]:empty::before {
+  content: attr(data-placeholder);
+  @apply text-slate;
+}
+
+.rich-editor__surface--disabled {
+  @apply cursor-not-allowed bg-mist text-slate;
+}
+
+.rich-editor__surface table,
+.rich-content table {
+  @apply my-3 w-full border-collapse overflow-hidden rounded-2xl border border-sand text-sm;
+}
+
+.rich-editor__surface th,
+.rich-editor__surface td,
+.rich-content th,
+.rich-content td {
+  @apply border border-sand px-3 py-2 align-top;
+}
+
+.rich-editor__surface th,
+.rich-content th {
+  @apply bg-sand/40 text-left font-semibold;
+}
+
+.rich-editor__surface blockquote,
+.rich-content blockquote {
+  @apply my-3 border-l-4 border-ember/40 pl-4 italic text-slate;
+}
+
+.rich-editor__surface ul,
+.rich-editor__surface ol,
+.rich-content ul,
+.rich-content ol {
+  @apply my-3 space-y-1 pl-6;
+}
+
+.rich-editor__surface h2,
+.rich-content h2 {
+  @apply mt-4 text-xl font-semibold text-ink;
+}
+
+.rich-editor__surface h3,
+.rich-content h3 {
+  @apply mt-3 text-lg font-semibold text-ink;
+}
+
+.rich-editor__surface h4,
+.rich-content h4 {
+  @apply mt-3 text-base font-semibold text-ink;
+}
+
+.rich-editor__surface p,
+.rich-editor__surface div,
+.rich-content p,
+.rich-content div {
+  @apply my-2;
+}
+
+.rich-editor__surface hr,
+.rich-content hr {
+  @apply my-4 border-sand;
+}
+
+.rich-content a,
+.rich-editor__surface a {
+  @apply text-ember underline underline-offset-2;
 }

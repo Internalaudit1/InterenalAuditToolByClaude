@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-export PATH="/opt/venv/bin:$PATH"
+export PATH="/opt/venv/bin:/usr/local/bin:$PATH"
+export NODE_ENV="${NODE_ENV:-production}"
 
-mkdir -p /app/storage/uploads /run/nginx
+mkdir -p /app/storage/uploads
 
 cd /app/apps/api
 
@@ -37,4 +38,38 @@ else
   echo "Skipping seed startup flow."
 fi
 
-exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
+cd /app/apps/api
+uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+API_PID=$!
+
+if [ -f /app/apps/web/.next/standalone/apps/web/server.js ]; then
+  cd /app/apps/web/.next/standalone/apps/web
+  HOSTNAME=127.0.0.1 PORT=3100 node server.js &
+else
+  cd /app
+  npm --workspace apps/web run start -- --hostname 127.0.0.1 --port 3100 &
+fi
+WEB_PID=$!
+
+node /app/proxy.mjs &
+PROXY_PID=$!
+
+cleanup() {
+  for pid in "$PROXY_PID" "$WEB_PID" "$API_PID"; do
+    kill "$pid" 2>/dev/null || true
+  done
+  wait "$PROXY_PID" "$WEB_PID" "$API_PID" 2>/dev/null || true
+}
+
+trap cleanup INT TERM
+
+while :; do
+  for pid in "$PROXY_PID" "$WEB_PID" "$API_PID"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" || true
+      cleanup
+      exit 1
+    fi
+  done
+  sleep 2
+done

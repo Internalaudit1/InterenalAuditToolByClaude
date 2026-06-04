@@ -43,7 +43,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("API_DATABASE_URL", "DATABASE_URL", "database_url"),
     )
     storage_root: str = Field(
-        default="./storage/uploads",
+        default="./storage/documents",
         validation_alias=AliasChoices("API_STORAGE_ROOT", "STORAGE_ROOT", "storage_root"),
     )
     run_seed_on_startup: bool = Field(

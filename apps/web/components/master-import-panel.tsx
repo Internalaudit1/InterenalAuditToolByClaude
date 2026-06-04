@@ -42,7 +42,7 @@ export function MasterImportPanel({ resource, onImported }: Props) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate">Excel Import</p>
           <h2 className="mt-1 font-serif text-2xl">Bulk Import Master Data</h2>
           <p className="mt-2 max-w-3xl text-sm text-slate">
-            Phase 1 uses strict insert-only import. Validate the workbook first; import is enabled only when every row passes validation.
+            Uses strict insert-only import. Validate the workbook first; import is enabled only when every row passes validation.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

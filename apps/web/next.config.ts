@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   typedRoutes: false,
+  output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../..")
 };
 

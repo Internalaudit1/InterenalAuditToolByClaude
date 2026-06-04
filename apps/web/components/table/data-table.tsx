@@ -8,6 +8,8 @@ import {
   useReactTable
 } from "@tanstack/react-table";
 
+import { looksLikeRichText, richTextToPlainText } from "@/lib/rich-text";
+
 type RowIdentifier = string | number;
 
 type Props<TData> = {
@@ -37,6 +39,14 @@ function compactCellStyle(): CSSProperties {
   };
 }
 
+function toCompactDisplayValue(value: string | number) {
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  return looksLikeRichText(value) ? richTextToPlainText(value) : value;
+}
+
 export function DataTable<TData>({
   columns,
   data,
@@ -46,8 +56,8 @@ export function DataTable<TData>({
   getRowId,
   renderRowActions,
   bulkActions,
-  maxHeight = "420px",
-  minTableWidth = "1100px",
+  maxHeight = "min(58vh, 540px)",
+  minTableWidth = "980px",
   compactCells = true
 }: Props<TData>) {
   const resolveRowId = (row: TData) => String(getRowId ? getRowId(row) : (row as { id?: RowIdentifier }).id ?? "");
@@ -105,7 +115,7 @@ export function DataTable<TData>({
   const shouldUseFixedScrollArea = data.length > 8;
 
   return (
-    <div className="panel overflow-hidden">
+    <div className="panel min-w-0 overflow-hidden">
       {bulkActions ? <div className="border-b border-sand/60 px-4 py-3">{bulkActions}</div> : null}
       <div
         className="relative overflow-auto"
@@ -119,7 +129,7 @@ export function DataTable<TData>({
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="sticky top-0 z-10 bg-sand px-4 py-3 font-semibold">
+                  <th key={header.id} className="sticky top-0 z-10 bg-sand px-3 py-3 font-semibold xl:px-4">
                     {header.isPlaceholder ? null : header.column.id === "__select__" ? (
                       <input
                         type="checkbox"
@@ -146,14 +156,15 @@ export function DataTable<TData>({
             {table.getRowModel().rows.map((row) => (
               <tr key={row.id} className="border-t border-sand/50 bg-white/70">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3 align-top">
+                  <td key={cell.id} className="px-3 py-3 align-top xl:px-4">
                     {(() => {
                       const rendered = flexRender(cell.column.columnDef.cell, cell.getContext());
                       const shouldClamp = compactCells && cell.column.id !== "__select__" && cell.column.id !== "__actions__" && isPrimitiveDisplayValue(rendered);
+                      const compactValue = shouldClamp ? toCompactDisplayValue(rendered) : null;
 
                       return shouldClamp ? (
-                        <div className="max-w-96 whitespace-normal break-words" style={compactCellStyle()} title={String(rendered)}>
-                          {rendered}
+                        <div className="max-w-80 whitespace-normal break-words xl:max-w-96" style={compactCellStyle()} title={compactValue ?? undefined}>
+                          {compactValue}
                         </div>
                       ) : rendered;
                     })()}

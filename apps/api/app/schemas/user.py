@@ -40,4 +40,6 @@ class UserRoleUpdate(BaseModel):
 class UserResponse(BaseResponse, UserBase):
     last_login_at: datetime | None = None
     role_codes: list[str] = []
-
+    designation_title: str | None = None
+    company_name: str | None = None
+    location_label: str | None = None

@@ -202,3 +202,4 @@ See:
 - [RBAC_MATRIX.md](/D:/AI%20project/Codex/Business%20central%20download%20PI/Replica/RBAC_MATRIX.md)
 - [DATABASE_SCHEMA.md](/D:/AI%20project/Codex/Business%20central%20download%20PI/Replica/DATABASE_SCHEMA.md)
 - [WORKFLOW_NOTES.md](/D:/AI%20project/Codex/Business%20central%20download%20PI/Replica/WORKFLOW_NOTES.md)
+- [docs/ROLE_BASED_USER_MANUAL.md](/D:/AI%20project/Codex/Business%20central%20download%20PI/Replica/docs/ROLE_BASED_USER_MANUAL.md)

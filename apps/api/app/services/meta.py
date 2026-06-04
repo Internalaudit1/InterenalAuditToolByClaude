@@ -68,6 +68,9 @@ TABLE_OVERLAYS: dict[str, TableOverlay] = {
     "overall_assessments": TableOverlay("Overall Assessments", "planning", permission="planning:view", business_endpoint="/planning/overall-assessments", frontend_mode="business_page"),
     "audit_plans": TableOverlay("Audit Plans", "planning", permission="planning:view", business_endpoint="/planning/audit-plans", frontend_mode="business_page", preferred_label_columns=("audit_number", "audit_name")),
     "audits": TableOverlay("Audits", "execution", permission="audits:view", business_endpoint="/audits", frontend_mode="business_page", preferred_label_columns=("audit_number", "audit_name")),
+    "audit_memberships": TableOverlay("Audit Memberships", "execution", permission="audit_memberships:view", frontend_mode="admin_read_only", preferred_label_columns=("role_on_audit",)),
+    "audit_activities": TableOverlay("Audit Activities", "execution", permission="audit_activities:view", frontend_mode="business_page", preferred_label_columns=("title",)),
+    "observations": TableOverlay("Observations", "execution", permission="observations:view", frontend_mode="business_page", preferred_label_columns=("observation_number", "heading")),
     "action_plans": TableOverlay("Action Plans", "action_plans", permission="action_plans:view", business_endpoint="/action-plans", frontend_mode="business_page", preferred_label_columns=("action_plan_id", "observation_heading")),
     "knowledge_library_items": TableOverlay("Knowledge Library", "knowledge", permission="library:view", business_endpoint="/knowledge-library", frontend_mode="business_page", preferred_label_columns=("title",)),
     "countries": TableOverlay("Countries", "master", permission="masters:view", business_endpoint="/master/countries", frontend_mode="business_page"),
@@ -116,6 +119,12 @@ LABEL_COLUMN_CANDIDATES = (
     "description",
     "id",
 )
+
+FIELD_LABEL_OVERRIDES = {
+    "audit_owner_id": "Lead Auditor",
+    "junior_auditor_1_id": "Junior Auditor 1",
+    "junior_auditor_2_id": "Junior Auditor 2",
+}
 
 RESERVED_QUERY_PARAMS = {"page", "page_size", "search", "sort_by", "sort_order"}
 
@@ -262,7 +271,7 @@ class MetaService:
                     primary_key=column.name in pk_columns,
                     foreign_key=foreign_key,
                     default=str(column.server_default.arg.text) if column.server_default is not None and getattr(column.server_default, "arg", None) is not None else None,
-                    suggested_display_label=self._humanize(column.name),
+                    suggested_display_label=FIELD_LABEL_OVERRIDES.get(column.name, self._humanize(column.name)),
                     editable=editable,
                     system_managed=system_managed,
                     hidden_by_default=hidden_by_default,

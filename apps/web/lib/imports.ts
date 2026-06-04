@@ -24,21 +24,28 @@ export type ImportCommitResponse = {
   validation: ImportValidationResponse;
 };
 
-export const PHASE_ONE_MASTER_IMPORT_RESOURCES = new Set([
+export const MASTER_IMPORT_RESOURCES = new Set([
   "countries",
   "states",
   "cities",
+  "companies",
   "processes",
+  "locations",
+  "process-location-mappings",
   "risk-types",
   "root-causes",
   "impacts",
   "recommendations",
   "report-considerations",
+  "trial-balances",
   "observation-gradings",
   "audit-escalations",
   "designations",
-  "control-performance-indicators"
+  "control-performance-indicators",
+  "task-swaps"
 ]);
+
+export const PHASE_ONE_MASTER_IMPORT_RESOURCES = MASTER_IMPORT_RESOURCES;
 
 function formDataFor(file: File) {
   const formData = new FormData();

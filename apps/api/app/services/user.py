@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.enums import ActivityAction, RoleCode
@@ -12,6 +12,7 @@ from app.core.security import create_access_token, create_refresh_token, hash_pa
 from app.models.action_plan import ActionPlan
 from app.models.audit import Audit, AuditPlan, BusinessInitiative
 from app.models.auth import Permission, RefreshToken, Role, User, UserRole
+from app.models.master import Auditee
 from app.models.support import Notification
 from app.repositories.base import BaseRepository
 from app.schemas.auth import AuthenticatedUser, TokenResponse
@@ -42,8 +43,52 @@ class UserService:
         )
         return db.execute(stmt).unique().scalar_one_or_none()
 
-    def list_users(self, db: Session) -> list[User]:
-        stmt = select(User).options(joinedload(User.role_links).joinedload(UserRole.role)).where(User.is_deleted.is_(False))
+    def _base_user_stmt(self):
+        return (
+            select(User)
+            .options(
+                joinedload(User.role_links).joinedload(UserRole.role),
+                joinedload(User.designation),
+                joinedload(User.company),
+                joinedload(User.location),
+            )
+            .where(User.is_deleted.is_(False))
+        )
+
+    def list_users(
+        self,
+        db: Session,
+        *,
+        q: str | None = None,
+        role: str | None = None,
+        roles: list[str] | None = None,
+        active_only: bool = False,
+        company_id: int | None = None,
+        location_id: int | None = None,
+        page_size: int | None = None,
+    ) -> list[User]:
+        stmt = self._base_user_stmt()
+        if active_only:
+            stmt = stmt.where(User.is_active.is_(True))
+        if company_id:
+            stmt = stmt.where(User.company_id == company_id)
+        if location_id:
+            stmt = stmt.where(User.location_id == location_id)
+        role_codes = [code for code in [role, *(roles or [])] if code]
+        if role_codes:
+            stmt = stmt.join(User.role_links).join(UserRole.role).where(Role.code.in_(role_codes), Role.is_deleted.is_(False))
+        if q:
+            stmt = stmt.where(
+                or_(
+                    User.full_name.ilike(f"%{q}%"),
+                    User.username.ilike(f"%{q}%"),
+                    User.email.ilike(f"%{q}%"),
+                    User.phone.ilike(f"%{q}%"),
+                )
+            )
+        stmt = stmt.order_by(User.full_name.asc(), User.username.asc())
+        if page_size:
+            stmt = stmt.limit(page_size)
         return list(db.execute(stmt).unique().scalars().all())
 
     def to_authenticated_user(self, user: User) -> AuthenticatedUser:
@@ -54,6 +99,8 @@ class UserService:
             username=user.username,
             email=user.email,
             full_name=user.full_name,
+            company_id=user.company_id,
+            location_id=user.location_id,
             roles=roles,
             permissions=permissions,
             last_login_at=user.last_login_at,
@@ -235,6 +282,7 @@ class UserService:
             (ActionPlan, "implementation_owner_user_id", "active action plans as implementation owner"),
             (ActionPlan, "assigned_auditor_user_id", "active action plans as assigned auditor"),
             (BusinessInitiative, "owner_user_id", "active business initiatives"),
+            (Auditee, "linked_user_id", "active auditee master records"),
         ]
         for model, field_name, label in dependency_checks:
             dependent_id = db.scalar(select(model.id).where(getattr(model, field_name) == user_id, model.is_deleted.is_(False)).limit(1))

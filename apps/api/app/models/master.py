@@ -57,6 +57,7 @@ class Company(ActiveMixin, BaseModel):
     city: Mapped[City] = relationship(City, back_populates="companies")
     locations: Mapped[list["Location"]] = relationship("Location", back_populates="company")
     users: Mapped[list["User"]] = relationship("User", back_populates="company")
+    auditees: Mapped[list["Auditee"]] = relationship("Auditee", back_populates="company")
 
 
 class Process(ActiveMixin, BaseModel):
@@ -81,14 +82,9 @@ class Location(ActiveMixin, BaseModel):
     state_id: Mapped[int] = mapped_column(ForeignKey("states.id"), nullable=False)
     city_id: Mapped[int] = mapped_column(ForeignKey("cities.id"), nullable=False)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    profit_center_code: Mapped[str] = mapped_column(String(100), nullable=False)
     location_code: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     risk_index: Mapped[str | None] = mapped_column(String(50), nullable=True)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    __table_args__ = (
-        Index("ix_locations_company_profit_center", "company_id", "profit_center_code"),
-    )
 
     country: Mapped[Country] = relationship(Country, back_populates="locations")
     state: Mapped[State] = relationship(State, back_populates="locations")
@@ -96,6 +92,7 @@ class Location(ActiveMixin, BaseModel):
     company: Mapped[Company] = relationship(Company, back_populates="locations")
     mappings: Mapped[list["ProcessLocationMapping"]] = relationship("ProcessLocationMapping", back_populates="location")
     users: Mapped[list["User"]] = relationship("User", back_populates="location")
+    auditees: Mapped[list["Auditee"]] = relationship("Auditee", back_populates="location")
 
 
 class ProcessLocationMapping(ActiveMixin, BaseModel):
@@ -106,7 +103,6 @@ class ProcessLocationMapping(ActiveMixin, BaseModel):
     process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"), nullable=False)
     location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), nullable=False)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    profit_center_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     trial_balance_id: Mapped[int | None] = mapped_column(ForeignKey("trial_balances.id"), nullable=True)
 
     __table_args__ = (
@@ -184,6 +180,36 @@ class Designation(ActiveMixin, BaseModel):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="designation")
+
+
+class Auditee(ActiveMixin, BaseModel):
+    __tablename__ = "auditees"
+
+    auditee_code: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    designation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"), nullable=True)
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
+    linked_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+
+    company: Mapped[Company | None] = relationship(Company, back_populates="auditees")
+    location: Mapped[Location | None] = relationship(Location, back_populates="auditees")
+    linked_user: Mapped["User | None"] = relationship("User", foreign_keys=[linked_user_id], back_populates="linked_auditee_records")
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
+
+    @property
+    def display_name(self) -> str:
+        return self.full_name
+
+    @property
+    def linked_user_name(self) -> str | None:
+        return self.linked_user.full_name if self.linked_user else None
 
 
 class ControlPerformanceIndicator(ActiveMixin, BaseModel):

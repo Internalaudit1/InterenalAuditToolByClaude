@@ -5,6 +5,8 @@ export type SessionUser = {
   username: string;
   email: string;
   full_name: string;
+  company_id?: number | null;
+  location_id?: number | null;
   roles: string[];
   permissions: string[];
 };

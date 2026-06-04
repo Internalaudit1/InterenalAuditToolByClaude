@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+import { RichTextContent } from "@/components/rich-text-content";
+import { richTextToPlainText } from "@/lib/rich-text";
+
 type RevisionStatusSnapshot = Record<string, unknown>;
 
 export type ActionPlanRevision = {
@@ -112,7 +115,8 @@ function getComment(revision: ActionPlanRevision) {
 }
 
 function getPreview(value: string) {
-  return value.length > 130 ? `${value.slice(0, 130)}...` : value;
+  const plainText = richTextToPlainText(value);
+  return plainText.length > 130 ? `${plainText.slice(0, 130)}...` : plainText;
 }
 
 function RevisionTimelineItem({
@@ -155,7 +159,11 @@ function RevisionTimelineItem({
           </div>
         ) : null}
 
-        <p className="mt-3 whitespace-pre-wrap text-sm text-slate">{expanded ? comment : getPreview(comment)}</p>
+        {expanded ? (
+          <RichTextContent value={comment} emptyText="No remarks captured for this revision." className="mt-3 text-sm text-slate" />
+        ) : (
+          <p className="mt-3 whitespace-pre-wrap text-sm text-slate">{getPreview(comment)}</p>
+        )}
 
         {expanded ? (
           <dl className="mt-4 grid gap-3 rounded-2xl bg-white/60 p-3 text-xs text-slate sm:grid-cols-2">

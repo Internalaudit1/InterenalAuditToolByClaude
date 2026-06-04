@@ -24,8 +24,12 @@ class Attachment(BaseModel):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
-    uploaded_by: Mapped["User | None"] = relationship("User", back_populates="attachments")
+    uploaded_by: Mapped["User | None"] = relationship("User", back_populates="attachments", foreign_keys=[uploaded_by_user_id])
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
 
 
 class KnowledgeLibraryItem(ActiveMixin, BaseModel):
@@ -62,8 +66,12 @@ class ActivityLog(BaseModel):
     ip_address: Mapped[str | None] = mapped_column(String(100), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
-    actor_user: Mapped["User | None"] = relationship("User")
+    actor_user: Mapped["User | None"] = relationship("User", foreign_keys=[actor_user_id])
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
 
 
 class Notification(BaseModel):
@@ -79,8 +87,35 @@ class Notification(BaseModel):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="notifications")
+    user: Mapped["User"] = relationship("User", back_populates="notifications", foreign_keys=[user_id])
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
+    outbox_entries: Mapped[list["NotificationOutbox"]] = relationship("NotificationOutbox", back_populates="notification", cascade="all, delete-orphan")
+
+
+class NotificationOutbox(BaseModel):
+    __tablename__ = "notification_outbox"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'dispatched', 'failed')", name="ck_notification_outbox_status_valid"),
+        Index("ix_notification_outbox_status_available", "status", "created_at"),
+    )
+
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(50), nullable=False, default="in_app")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+
+    notification: Mapped["Notification"] = relationship("Notification", back_populates="outbox_entries")
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
 
 
 class ManagementReview(BaseModel):
@@ -103,7 +138,9 @@ class ManagementReview(BaseModel):
     review_note: Mapped[str] = mapped_column(Text, nullable=False)
     review_decision: Mapped[str] = mapped_column(String(50), nullable=False, default="Noted")
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
     audit: Mapped["Audit | None"] = relationship("Audit")
     action_plan: Mapped["ActionPlan | None"] = relationship("ActionPlan")
-    created_by_user: Mapped["User"] = relationship("User")
+    created_by_user: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])

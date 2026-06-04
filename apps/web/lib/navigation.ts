@@ -19,7 +19,12 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Audit Plans", href: "/planning/audit-plans", permissions: ["planning:view"] }
     ]
   },
+  { label: "Engagement Planning", href: "/engagement-plans", permissions: ["engagement_plans:view"] },
   { label: "Manage Audits", href: "/audits", permissions: ["audits:view"] },
+  { label: "Workpapers", href: "/workpapers", permissions: ["workpapers:view"] },
+  { label: "Evidence Register", href: "/evidence", permissions: ["evidence:view"] },
+  { label: "My Activities", href: "/activities", permissions: ["audit_activities:view"] },
+  { label: "Observations", href: "/observations", permissions: ["observations:view"] },
   { label: "Action Plans", href: "/action-plans", permissions: ["action_plans:view"] },
   { label: "Reports", href: "/reports", permissions: ["reports:view"] },
   {
@@ -54,6 +59,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Trial Balance", href: "/masters/trial-balances", permissions: ["masters:view"] },
       { label: "Audit Escalation", href: "/masters/audit-escalations", permissions: ["masters:view"] },
       { label: "Designation", href: "/masters/designations", permissions: ["masters:view"] },
+      { label: "Auditees", href: "/masters/auditees", permissions: ["masters:view"] },
       { label: "Control Performance Indicator", href: "/masters/control-performance-indicators", permissions: ["masters:view"] },
       { label: "Task Swap", href: "/masters/task-swaps", permissions: ["masters:view"] }
     ]
@@ -99,7 +105,12 @@ export function isRouteAllowed(pathname: string, permissions: string[]) {
 export function defaultWorkspacePath(permissions: string[]) {
   if (permissions.includes("dashboard:view")) return "/dashboard";
   if (permissions.includes("planning:view")) return "/planning/audit-plans";
+  if (permissions.includes("engagement_plans:view")) return "/engagement-plans";
   if (permissions.includes("audits:view")) return "/audits";
+  if (permissions.includes("workpapers:view")) return "/workpapers";
+  if (permissions.includes("evidence:view")) return "/evidence";
+  if (permissions.includes("audit_activities:view")) return "/activities";
+  if (permissions.includes("observations:view")) return "/observations";
   if (permissions.includes("action_plans:view")) return "/action-plans";
   if (permissions.includes("reports:view")) return "/reports";
   return "/forbidden";

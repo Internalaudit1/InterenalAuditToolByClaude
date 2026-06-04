@@ -10,15 +10,23 @@ from app.schemas.base import BaseResponse
 
 class MasterRecordBase(BaseModel):
     code: str | None = None
+    auditee_code: str | None = None
     name: str | None = None
+    full_name: str | None = None
     title: str | None = None
     description: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    designation: str | None = None
+    department: str | None = None
     country_id: int | None = None
     state_id: int | None = None
     city_id: int | None = None
     company_id: int | None = None
     process_id: int | None = None
     location_id: int | None = None
+    linked_user_id: int | None = None
+    linked_user_name: str | None = None
     trial_balance_id: int | None = None
     audit_name: str | None = None
     sector: str | None = None
@@ -27,7 +35,6 @@ class MasterRecordBase(BaseModel):
     gst_no: str | None = None
     division_id: str | None = None
     division_description: str | None = None
-    profit_center_code: str | None = None
     location_code: str | None = None
     risk_index: str | None = None
     severity_rank: int | None = None

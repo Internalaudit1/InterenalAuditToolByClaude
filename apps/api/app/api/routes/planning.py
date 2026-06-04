@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps.auth import CurrentUser, require_permissions
 from app.api.deps.common import get_list_query
 from app.db.session import get_db
-from app.schemas.audit import AuditPlanCreate, AuditPlanResponse, AuditPlanUpdate
+from app.schemas.audit import AuditPlanCreate, AuditPlanInitiateRequest, AuditPlanResponse, AuditPlanUpdate, AuditResponse
 from app.schemas.common import BulkDeleteRequest, BulkDeleteResponse, ListQuery, MessageResponse, PaginatedResponse
 from app.schemas.planning import (
     BusinessInitiativeCreate,
@@ -260,7 +260,7 @@ def list_audit_plans(
     company_id: int | None = Query(None),
     location_id: int | None = Query(None),
     quarter: str | None = Query(None),
-    _: CurrentUser = Depends(require_permissions("planning:view")),
+    current_user: CurrentUser = Depends(require_permissions("planning:view")),
     db: Session = Depends(get_db),
 ):
     filters = {}
@@ -271,7 +271,7 @@ def list_audit_plans(
     if quarter:
         filters["quarter"] = quarter
     query.filters = filters or None
-    return audit_service.list_audit_plans(db, query)
+    return audit_service.list_audit_plans(db, query, current_user)
 
 
 @router.post("/audit-plans", response_model=AuditPlanResponse)
@@ -280,7 +280,7 @@ def create_audit_plan(
     current_user: CurrentUser = Depends(require_permissions("planning:manage")),
     db: Session = Depends(get_db),
 ):
-    entity = audit_service.create_audit_plan(db, payload, current_user.full_name, current_user.id)
+    entity = audit_service.create_audit_plan(db, payload, current_user.full_name, current_user.id, current_user)
     db.commit()
     return entity
 
@@ -292,7 +292,7 @@ def update_audit_plan(
     current_user: CurrentUser = Depends(require_permissions("planning:manage")),
     db: Session = Depends(get_db),
 ):
-    entity = audit_service.update_audit_plan(db, audit_plan_id, payload, current_user.full_name, current_user.id)
+    entity = audit_service.update_audit_plan(db, audit_plan_id, payload, current_user.full_name, current_user.id, current_user)
     db.commit()
     return entity
 
@@ -317,3 +317,59 @@ def bulk_delete_audit_plans(
     response = audit_service.bulk_delete_audit_plans(db, payload.ids, current_user.full_name, current_user.id)
     db.commit()
     return response
+
+
+@router.post("/audit-plans/{audit_plan_id}/submit-for-approval", response_model=AuditPlanResponse)
+def submit_audit_plan_for_approval(
+    audit_plan_id: int,
+    current_user: CurrentUser = Depends(require_permissions("planning:manage")),
+    db: Session = Depends(get_db),
+):
+    entity = audit_service.submit_audit_plan_for_approval(db, audit_plan_id, current_user.full_name, current_user.id)
+    db.commit()
+    return entity
+
+
+@router.post("/audit-plans/{audit_plan_id}/approve", response_model=AuditPlanResponse)
+def approve_audit_plan(
+    audit_plan_id: int,
+    current_user: CurrentUser = Depends(require_permissions("planning:approve")),
+    db: Session = Depends(get_db),
+):
+    entity = audit_service.approve_audit_plan(db, audit_plan_id, current_user.full_name, current_user.id)
+    db.commit()
+    return entity
+
+
+@router.post("/audit-plans/{audit_plan_id}/defer", response_model=AuditPlanResponse)
+def defer_audit_plan(
+    audit_plan_id: int,
+    current_user: CurrentUser = Depends(require_permissions("planning:approve")),
+    db: Session = Depends(get_db),
+):
+    entity = audit_service.defer_audit_plan(db, audit_plan_id, current_user.full_name, current_user.id)
+    db.commit()
+    return entity
+
+
+@router.post("/audit-plans/{audit_plan_id}/cancel", response_model=AuditPlanResponse)
+def cancel_audit_plan(
+    audit_plan_id: int,
+    current_user: CurrentUser = Depends(require_permissions("planning:approve")),
+    db: Session = Depends(get_db),
+):
+    entity = audit_service.cancel_audit_plan(db, audit_plan_id, current_user.full_name, current_user.id)
+    db.commit()
+    return entity
+
+
+@router.post("/audit-plans/{audit_plan_id}/initiate-audit", response_model=AuditResponse)
+def initiate_audit_plan(
+    audit_plan_id: int,
+    payload: AuditPlanInitiateRequest,
+    current_user: CurrentUser = Depends(require_permissions("planning:approve")),
+    db: Session = Depends(get_db),
+):
+    entity = audit_service.initiate_audit_from_plan(db, audit_plan_id, payload, current_user.full_name, current_user.id)
+    db.commit()
+    return entity

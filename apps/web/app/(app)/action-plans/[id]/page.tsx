@@ -3,7 +3,9 @@
 import { use, useEffect, useState } from "react";
 
 import { RevisionHistoryPanel } from "@/components/action-plan-revision-history";
+import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { PageShell } from "@/components/layout/page-shell";
+import { RichTextContent } from "@/components/rich-text-content";
 import { apiFetch } from "@/lib/api";
 import { getPrimaryRole, hasPermission } from "@/lib/auth";
 
@@ -20,6 +22,8 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
   const [actionPlan, setActionPlan] = useState<any>(null);
   const [managementReviews, setManagementReviews] = useState<ManagementReview[]>([]);
   const [managementReviewForm, setManagementReviewForm] = useState({ review_note: "", review_decision: "Noted" });
+  const [auditeeRemarks, setAuditeeRemarks] = useState("");
+  const [auditorReviewRemarks, setAuditorReviewRemarks] = useState("");
   const [message, setMessage] = useState("");
   const role = getPrimaryRole();
   const canViewManagementReviews = hasPermission("management_reviews:view");
@@ -32,6 +36,8 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
     ]);
     setActionPlan(data);
     setManagementReviews(reviewData);
+    setAuditeeRemarks(data.management_implementation_remarks ?? "");
+    setAuditorReviewRemarks("");
   }
 
   useEffect(() => {
@@ -52,19 +58,19 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
           </div>
           <div>
             <h2 className="font-serif text-2xl">Detailed Observation</h2>
-            <p className="mt-3 text-sm text-slate">{actionPlan.detailed_observation}</p>
+            <RichTextContent value={actionPlan.detailed_observation} emptyText="No detailed observation captured." className="mt-3 text-sm text-slate" />
           </div>
           <div>
             <h2 className="font-serif text-2xl">Management Response</h2>
-            <p className="mt-3 text-sm text-slate">{actionPlan.management_response || "No response yet."}</p>
+            <RichTextContent value={actionPlan.management_response} emptyText="No response yet." className="mt-3 text-sm text-slate" />
           </div>
           <div>
             <h2 className="font-serif text-2xl">Agreed Action Plan</h2>
-            <p className="mt-3 text-sm text-slate">{actionPlan.agreed_action_plan || "No agreed action plan yet."}</p>
+            <RichTextContent value={actionPlan.agreed_action_plan} emptyText="No agreed action plan yet." className="mt-3 text-sm text-slate" />
           </div>
           <div className="rounded-2xl bg-sand/50 p-4">
             <h2 className="font-serif text-2xl">Auditee Implementation Remarks</h2>
-            <p className="mt-3 whitespace-pre-wrap text-sm text-slate">{actionPlan.management_implementation_remarks || "No implementation remarks submitted yet."}</p>
+            <RichTextContent value={actionPlan.management_implementation_remarks} emptyText="No implementation remarks submitted yet." className="mt-3 text-sm text-slate" />
           </div>
         </section>
         <section className="space-y-6">
@@ -105,11 +111,11 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
                   </label>
                   <label className="mt-3 block space-y-2 text-sm font-semibold">
                     <span>Review Note</span>
-                    <textarea
-                      className="field min-h-24"
+                    <RichTextEditor
                       value={managementReviewForm.review_note}
-                      onChange={(event) => setManagementReviewForm((prev) => ({ ...prev, review_note: event.target.value }))}
+                      onChange={(nextValue) => setManagementReviewForm((prev) => ({ ...prev, review_note: nextValue }))}
                       placeholder="Add management review note"
+                      minHeightClass="min-h-24"
                     />
                   </label>
                   <button className="button-primary mt-3">Add Review Note</button>
@@ -125,7 +131,7 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
                       </div>
                       <p className="text-xs text-slate">{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(review.created_at))}</p>
                     </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate">{review.review_note}</p>
+                    <RichTextContent value={review.review_note} emptyText="No review note captured." className="mt-3 text-sm text-slate" />
                   </article>
                 ))}
                 {!managementReviews.length ? (
@@ -141,11 +147,10 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
               className="panel space-y-4 p-6"
               onSubmit={async (event) => {
                 event.preventDefault();
-                const formData = new FormData(event.currentTarget);
                 await apiFetch(`/action-plans/${id}/remarks`, {
                   method: "POST",
                   body: JSON.stringify({
-                    management_implementation_remarks: formData.get("remarks")
+                    management_implementation_remarks: auditeeRemarks
                   })
                 });
                 setMessage("Implementation remarks updated.");
@@ -154,7 +159,12 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
             >
               <h2 className="font-serif text-2xl">Implementation Remarks</h2>
               <p className="text-sm text-slate">Auditee access is limited to updating implementation remarks. Status and auditor-side review fields are controlled separately.</p>
-              <textarea name="remarks" className="field min-h-32" placeholder="Implementation remarks" defaultValue={actionPlan.management_implementation_remarks ?? ""} />
+              <RichTextEditor
+                value={auditeeRemarks}
+                onChange={setAuditeeRemarks}
+                placeholder="Implementation remarks"
+                minHeightClass="min-h-32"
+              />
               <button className="button-primary">Save Remarks</button>
             </form>
           ) : null}
@@ -163,12 +173,11 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
               className="panel space-y-4 p-6"
               onSubmit={async (event) => {
                 event.preventDefault();
-                const formData = new FormData(event.currentTarget);
                 await apiFetch(`/action-plans/${id}/review`, {
                   method: "POST",
                   body: JSON.stringify({
-                    auditor_status: formData.get("auditor_status"),
-                    auditor_implementation_remarks: formData.get("remarks")
+                    auditor_status: new FormData(event.currentTarget).get("auditor_status"),
+                    auditor_implementation_remarks: auditorReviewRemarks
                   })
                 });
                 setMessage("Review submitted.");
@@ -178,9 +187,14 @@ export default function ActionPlanDetailPage({ params }: { params: Promise<{ id:
               <h2 className="font-serif text-2xl">Auditor Review</h2>
               <div className="rounded-2xl border border-sand bg-cream p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-clay">Latest Auditee Remarks</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-slate">{actionPlan.management_implementation_remarks || "No implementation remarks submitted yet."}</p>
+                <RichTextContent value={actionPlan.management_implementation_remarks} emptyText="No implementation remarks submitted yet." className="mt-2 text-sm text-slate" />
               </div>
-              <textarea name="remarks" className="field min-h-24" placeholder="Auditor remarks" />
+              <RichTextEditor
+                value={auditorReviewRemarks}
+                onChange={setAuditorReviewRemarks}
+                placeholder="Auditor remarks"
+                minHeightClass="min-h-24"
+              />
               <select name="auditor_status" className="field">
                 <option value="Under Review">Under Review</option>
                 <option value="Completed">Completed</option>

@@ -11,6 +11,7 @@ from app.core.exceptions import ConflictException, NotFoundException, Validation
 from app.core.permissions import MASTER_RESOURCE_MAP
 from app.models import (
     ActionPlan,
+    Auditee,
     Audit,
     AuditEscalation,
     AuditPlan,
@@ -25,6 +26,7 @@ from app.models import (
     Location,
     ObservationGrading,
     OverallAssessment,
+    Observation,
     Process,
     ProcessLocationMapping,
     ProcessRiskMapping,
@@ -37,10 +39,12 @@ from app.models import (
     TrialBalance,
     User,
 )
+from app.models.engagement import EngagementPlan
 from app.repositories.base import BaseRepository
 from app.schemas.common import BlockedDeleteItem, BulkDeleteResponse, ListQuery, PaginationMeta, PaginatedResponse
 from app.schemas.master import MasterRecordCreate, MasterRecordUpdate
 from app.services.activity_log import activity_log_service
+from app.services.assignment_directory import assignment_directory_service
 from app.utils.serialization import model_to_dict
 
 MASTER_MODELS: dict[str, type] = {
@@ -62,6 +66,7 @@ MASTER_MODELS: dict[str, type] = {
     "designations": Designation,
     "control-performance-indicators": ControlPerformanceIndicator,
     "task-swaps": TaskSwapRule,
+    "auditees": Auditee,
 }
 
 MASTER_DEPENDENCY_CHECKS: dict[str, list[tuple[type, str, str]]] = {
@@ -70,6 +75,7 @@ MASTER_DEPENDENCY_CHECKS: dict[str, list[tuple[type, str, str]]] = {
     "cities": [(Company, "city_id", "companies"), (Location, "city_id", "locations")],
     "companies": [
         (Location, "company_id", "locations"),
+        (Auditee, "company_id", "auditees"),
         (User, "company_id", "users"),
         (AuditPlan, "company_id", "audit plans"),
         (Audit, "company_id", "audits"),
@@ -78,6 +84,7 @@ MASTER_DEPENDENCY_CHECKS: dict[str, list[tuple[type, str, str]]] = {
     ],
     "processes": [(ProcessLocationMapping, "process_id", "process-location mappings"), (ERMRisk, "process_id", "ERM risks")],
     "locations": [
+        (Auditee, "location_id", "auditees"),
         (User, "location_id", "users"),
         (AuditPlan, "location_id", "audit plans"),
         (Audit, "location_id", "audits"),
@@ -91,6 +98,11 @@ MASTER_DEPENDENCY_CHECKS: dict[str, list[tuple[type, str, str]]] = {
     "trial-balances": [(ProcessLocationMapping, "trial_balance_id", "process-location mappings"), (ProcessRiskMapping, "trial_balance_id", "process risk mappings")],
     "observation-gradings": [(ActionPlan, "observation_grading_id", "action plans")],
     "designations": [(User, "designation_id", "users"), (TaskSwapRule, "source_designation_id", "task swap rules"), (TaskSwapRule, "target_designation_id", "task swap rules")],
+    "auditees": [
+        (Audit, "auditee_spoc_auditee_id", "audits"),
+        (Observation, "auditee_id", "observations"),
+        (EngagementPlan, "auditee_spoc_auditee_id", "engagement plans"),
+    ],
 }
 
 
@@ -124,7 +136,7 @@ class MasterService:
             return None
 
     def _validate_geography_chain(self, db: Session, model: type, data: dict[str, Any]) -> None:
-        if model not in {Company, Location}:
+        if model not in {Company, Location, Auditee}:
             return
 
         country_id = self._as_int(data.get("country_id"))
@@ -154,6 +166,13 @@ class MasterService:
                 raise ValidationException("Selected city was not found.")
             if city_state_id != state_id:
                 raise ValidationException("Selected city does not belong to the selected state.")
+
+    def _validate_foreign_assignments(self, db: Session, model: type, data: dict[str, Any]) -> None:
+        if model is not Auditee:
+            return
+        linked_user_id = self._as_int(data.get("linked_user_id"))
+        if linked_user_id:
+            assignment_directory_service.validate_auditee_user(db, linked_user_id, label="Linked portal user")
 
     def _ensure_not_referenced(self, db: Session, resource: str, entity_id: int) -> None:
         for model, field_name, label in MASTER_DEPENDENCY_CHECKS.get(resource, []):
@@ -197,8 +216,13 @@ class MasterService:
         if not data:
             raise ValidationException("Payload does not contain any supported fields for this resource.")
         self._validate_geography_chain(db, model, data)
+        self._validate_foreign_assignments(db, model, data)
         data["created_by"] = actor_name
         data["updated_by"] = actor_name
+        if "created_by_user_id" in {column.key for column in sqlalchemy_inspect(model).columns}:
+            data["created_by_user_id"] = actor_id
+        if "updated_by_user_id" in {column.key for column in sqlalchemy_inspect(model).columns}:
+            data["updated_by_user_id"] = actor_id
         entity = repository.create(db, data)
         activity_log_service.log(
             db,
@@ -222,7 +246,10 @@ class MasterService:
         before = model_to_dict(entity)
         data = self._filter_payload(model, payload.model_dump(exclude_none=True))
         self._validate_geography_chain(db, model, {**before, **data})
+        self._validate_foreign_assignments(db, model, {**before, **data})
         data["updated_by"] = actor_name
+        if "updated_by_user_id" in {column.key for column in sqlalchemy_inspect(model).columns}:
+            data["updated_by_user_id"] = actor_id
         entity = repository.update(db, entity, data)
         activity_log_service.log(
             db,

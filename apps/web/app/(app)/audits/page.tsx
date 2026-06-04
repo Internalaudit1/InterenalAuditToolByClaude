@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
 
 import { ResourcePage } from "@/components/resource-page";
+import { hasPermission } from "@/lib/auth";
 
 const columns: ColumnDef<Record<string, unknown>>[] = [
   { accessorKey: "audit_number", header: "Audit No" },
@@ -14,7 +15,18 @@ const columns: ColumnDef<Record<string, unknown>>[] = [
   {
     accessorKey: "id",
     header: "Action",
-    cell: ({ row }) => <Link className="text-ember underline" href={`/audits/${String(row.original.id)}`}>View</Link>
+    cell: ({ row }) => (
+      <div className="flex flex-wrap gap-3">
+        <Link className="text-ember underline" href={`/audits/${String(row.original.id)}`}>
+          View
+        </Link>
+        {hasPermission("engagement_plans:manage") ? (
+          <Link className="text-ember underline" href={`/engagement-plans?auditId=${String(row.original.id)}`}>
+            Start Engagement
+          </Link>
+        ) : null}
+      </div>
+    )
   }
 ];
 

@@ -33,7 +33,6 @@ def test_location_rejects_state_that_does_not_belong_to_country(client, setup_da
             "state_id": london_state.id,
             "city_id": london_city.id,
             "company_id": company.id,
-            "profit_center_code": "GEO-BLOCK-1",
             "location_code": "GEO-BLOCK-1",
             "risk_index": "Low",
             "description": "Invalid geography chain",
@@ -59,7 +58,6 @@ def test_location_rejects_city_that_does_not_belong_to_state(client, setup_datab
             "state_id": karnataka.id,
             "city_id": london_city.id,
             "company_id": company.id,
-            "profit_center_code": "GEO-BLOCK-2",
             "location_code": "GEO-BLOCK-2",
             "risk_index": "Low",
             "description": "Invalid city chain",
@@ -89,4 +87,3 @@ def test_company_rejects_state_that_does_not_belong_to_country(client, setup_dat
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Selected state does not belong to the selected country."
-

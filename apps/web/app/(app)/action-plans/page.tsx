@@ -9,6 +9,7 @@ import { StatGrid } from "@/components/stat-grid";
 import { DataTable } from "@/components/table/data-table";
 import { apiFetch } from "@/lib/api";
 import { getPrimaryRole, hasPermission } from "@/lib/auth";
+import { richTextToPlainText } from "@/lib/rich-text";
 
 type Summary = { all: number; in_progress: number; pending: number; completed: number; overdue: number; due_soon: number };
 type BulkDeleteResponse = { deleted_ids: number[]; blocked: { id: number; reason: string }[]; message: string };
@@ -21,7 +22,7 @@ const columns: ColumnDef<Record<string, unknown>>[] = [
     accessorKey: "management_implementation_remarks",
     header: "Auditee Remarks",
     cell: ({ row }) => {
-      const value = String(row.original.management_implementation_remarks ?? "").trim();
+      const value = richTextToPlainText(String(row.original.management_implementation_remarks ?? "")).trim();
       if (!value) {
         return <span className="text-slate">--</span>;
       }

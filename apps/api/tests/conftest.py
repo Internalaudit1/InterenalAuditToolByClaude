@@ -63,7 +63,6 @@ def setup_database() -> Generator[Session, None, None]:
             state=state,
             city=city,
             company=company,
-            profit_center_code="002",
             location_code="002",
             risk_index="High",
             description="Bengaluru Shared Services",

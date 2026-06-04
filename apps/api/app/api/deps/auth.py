@@ -22,6 +22,8 @@ class CurrentUser:
     username: str
     full_name: str
     email: str
+    company_id: int | None
+    location_id: int | None
     role_codes: list[str]
     permissions: list[str]
 
@@ -47,6 +49,8 @@ def get_current_user(
         username=auth_user.username,
         full_name=auth_user.full_name,
         email=auth_user.email,
+        company_id=auth_user.company_id,
+        location_id=auth_user.location_id,
         role_codes=auth_user.roles,
         permissions=auth_user.permissions,
     )

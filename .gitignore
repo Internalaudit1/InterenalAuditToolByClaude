@@ -23,4 +23,5 @@ apps/api/.mypy_cache
 apps/api/.coverage
 storage/uploads/*
 !storage/uploads/.gitkeep
-
+storage/documents/*
+!storage/documents/.gitkeep

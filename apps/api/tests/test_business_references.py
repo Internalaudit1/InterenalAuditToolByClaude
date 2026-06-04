@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from datetime import date
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from fastapi.testclient import TestClient
 
+from app.models import Company, Designation, Location
+from app.models.support import Notification
+from app.schemas.user import UserCreate
+from app.services.user import user_service
 from tests.conftest import auth_headers
 
 
@@ -61,6 +67,35 @@ def _action_plan_payload(audit_id: int) -> dict:
     }
 
 
+def _ensure_user(db: Session, *, username: str, role_code: str, email: str, full_name: str) -> None:
+    if user_service.get_by_username(db, username):
+        return
+    designation_id = db.scalar(select(Designation.id).where(Designation.code == "AUD").limit(1))
+    company_id = db.scalar(select(Company.id).limit(1))
+    location_id = db.scalar(select(Location.id).limit(1))
+    user_service.create_user(
+        db,
+        UserCreate(
+            username=username,
+            email=email,
+            full_name=full_name,
+            password="Password@123",
+            designation_id=designation_id,
+            company_id=company_id,
+            location_id=location_id,
+            role_codes=[role_code],
+        ),
+        "test",
+    )
+    db.commit()
+
+
+def _user_id(db: Session, username: str) -> int:
+    user = user_service.get_by_username(db, username)
+    assert user is not None
+    return user.id
+
+
 def test_audit_plan_number_is_generated_and_manual_value_is_rejected(client: TestClient):
     headers = auth_headers(client, "auditoruser1")
 
@@ -81,15 +116,161 @@ def test_audit_plan_number_is_generated_and_manual_value_is_rejected(client: Tes
 def test_audit_plan_period_values_are_controlled(client: TestClient):
     headers = auth_headers(client, "auditoruser1")
 
+    monthly_payload = _audit_plan_payload("Monthly period plan")
+    monthly_payload["period_type"] = "Monthly"
+    monthly_payload["period_value"] = "April"
+    monthly_response = client.post("/api/v1/planning/audit-plans", json=monthly_payload, headers=headers)
+    assert monthly_response.status_code == 200
+    assert monthly_response.json()["period_type"] == "Monthly"
+    assert monthly_response.json()["period_value"] == "April"
+    assert monthly_response.json()["quarter"] == "April"
+
     bad_pair_payload = _audit_plan_payload("Bad period pair")
     bad_pair_payload["period_value"] = "H1"
     bad_pair_response = client.post("/api/v1/planning/audit-plans", json=bad_pair_payload, headers=headers)
     assert bad_pair_response.status_code == 422
 
+    bad_month_payload = _audit_plan_payload("Bad monthly period pair")
+    bad_month_payload["period_type"] = "Monthly"
+    bad_month_payload["period_value"] = "Q1"
+    bad_month_response = client.post("/api/v1/planning/audit-plans", json=bad_month_payload, headers=headers)
+    assert bad_month_response.status_code == 422
+
     legacy_quarter_payload = _audit_plan_payload("Legacy quarter should fail")
     legacy_quarter_payload["quarter"] = "Q2"
     legacy_quarter_response = client.post("/api/v1/planning/audit-plans", json=legacy_quarter_payload, headers=headers)
     assert legacy_quarter_response.status_code == 422
+
+
+def test_audit_plan_allows_optional_junior_auditors_and_initiates_memberships(client: TestClient, setup_database: Session):
+    _ensure_user(
+        setup_database,
+        username="juniorauditor1",
+        role_code="junior_auditor",
+        email="junior.auditor@example.com",
+        full_name="Junior Auditor 1",
+    )
+    junior_auditor_id = _user_id(setup_database, "juniorauditor1")
+    headers = auth_headers(client, "superadmin")
+    payload = _audit_plan_payload("Junior auditor plan")
+    payload["junior_auditor_1_id"] = 1
+    payload["junior_auditor_2_id"] = junior_auditor_id
+
+    create_response = client.post("/api/v1/planning/audit-plans", json=payload, headers=headers)
+    assert create_response.status_code == 200
+    plan = create_response.json()
+    assert plan["junior_auditor_1_id"] == 1
+    assert plan["junior_auditor_2_id"] == junior_auditor_id
+
+    assert client.post(f"/api/v1/planning/audit-plans/{plan['id']}/submit-for-approval", json={}, headers=headers).status_code == 200
+    assert client.post(f"/api/v1/planning/audit-plans/{plan['id']}/approve", json={}, headers=headers).status_code == 200
+    initiate_response = client.post(f"/api/v1/planning/audit-plans/{plan['id']}/initiate-audit", json={}, headers=headers)
+    assert initiate_response.status_code == 200
+
+    members_response = client.get(f"/api/v1/audits/{initiate_response.json()['id']}/members", headers=headers)
+    assert members_response.status_code == 200
+    junior_member_ids = {
+        item["user_id"]
+        for item in members_response.json()
+        if item["role_on_audit"] == "junior_auditor"
+    }
+    assert junior_member_ids == {1, junior_auditor_id}
+
+
+def test_head_auditor_can_initiate_and_lead_auditor_is_notified(client: TestClient, setup_database: Session):
+    _ensure_user(
+        setup_database,
+        username="headauditor1",
+        role_code="head_auditor",
+        email="head.auditor@example.com",
+        full_name="Head Auditor 1",
+    )
+    _ensure_user(
+        setup_database,
+        username="juniorauditor1",
+        role_code="junior_auditor",
+        email="junior.auditor@example.com",
+        full_name="Junior Auditor 1",
+    )
+    junior_auditor_id = _user_id(setup_database, "juniorauditor1")
+    super_headers = auth_headers(client, "superadmin")
+    head_headers = auth_headers(client, "headauditor1")
+    payload = _audit_plan_payload("Head auditor initiation")
+    payload["junior_auditor_1_id"] = junior_auditor_id
+
+    create_response = client.post("/api/v1/planning/audit-plans", json=payload, headers=super_headers)
+    assert create_response.status_code == 200
+    plan_id = create_response.json()["id"]
+
+    assert client.post(f"/api/v1/planning/audit-plans/{plan_id}/submit-for-approval", json={}, headers=super_headers).status_code == 200
+    assert client.post(f"/api/v1/planning/audit-plans/{plan_id}/approve", json={}, headers=head_headers).status_code == 200
+
+    initiate_response = client.post(
+        f"/api/v1/planning/audit-plans/{plan_id}/initiate-audit",
+        json={},
+        headers=head_headers,
+    )
+    assert initiate_response.status_code == 200, initiate_response.text
+    audit_payload = initiate_response.json()
+    assert audit_payload["audit_owner_id"] == 2
+
+    members_response = client.get(f"/api/v1/audits/{audit_payload['id']}/members", headers=super_headers)
+    assert members_response.status_code == 200
+    roles_by_user = {(entry["user_id"], entry["role_on_audit"]) for entry in members_response.json()}
+    assert (2, "lead_auditor") in roles_by_user
+    assert (junior_auditor_id, "junior_auditor") in roles_by_user
+
+    notification = setup_database.scalar(
+        select(Notification)
+        .where(Notification.user_id == 2, Notification.title == "Audit initiated")
+        .order_by(Notification.id.desc())
+        .limit(1)
+    )
+    assert notification is not None
+    assert audit_payload["audit_number"] in notification.message
+
+
+def test_initiation_requires_assigned_lead_auditor(client: TestClient):
+    headers = auth_headers(client, "superadmin")
+    payload = _audit_plan_payload("Missing lead auditor")
+    payload["audit_owner_id"] = None
+
+    create_response = client.post("/api/v1/planning/audit-plans", json=payload, headers=headers)
+    assert create_response.status_code == 200
+    plan_id = create_response.json()["id"]
+
+    assert client.post(f"/api/v1/planning/audit-plans/{plan_id}/submit-for-approval", json={}, headers=headers).status_code == 200
+    assert client.post(f"/api/v1/planning/audit-plans/{plan_id}/approve", json={}, headers=headers).status_code == 200
+
+    initiate_response = client.post(f"/api/v1/planning/audit-plans/{plan_id}/initiate-audit", json={}, headers=headers)
+    assert initiate_response.status_code == 422
+    assert "Lead Auditor" in initiate_response.json()["detail"]
+
+
+def test_auditor_cannot_initiate_approved_audit_plan(client: TestClient):
+    super_headers = auth_headers(client, "superadmin")
+    auditor_headers = auth_headers(client, "auditoruser1")
+
+    create_response = client.post("/api/v1/planning/audit-plans", json=_audit_plan_payload("Auditor cannot initiate"), headers=super_headers)
+    assert create_response.status_code == 200
+    plan_id = create_response.json()["id"]
+
+    assert client.post(f"/api/v1/planning/audit-plans/{plan_id}/submit-for-approval", json={}, headers=super_headers).status_code == 200
+    assert client.post(f"/api/v1/planning/audit-plans/{plan_id}/approve", json={}, headers=super_headers).status_code == 200
+
+    initiate_response = client.post(f"/api/v1/planning/audit-plans/{plan_id}/initiate-audit", json={}, headers=auditor_headers)
+    assert initiate_response.status_code == 403
+
+
+def test_audit_plan_rejects_duplicate_auditor_assignments(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+    payload = _audit_plan_payload("Duplicate junior auditor plan")
+    payload["junior_auditor_1_id"] = 2
+
+    response = client.post("/api/v1/planning/audit-plans", json=payload, headers=headers)
+
+    assert response.status_code == 422
+    assert "must be different users" in response.json()["detail"]
 
 
 def test_audits_share_plan_number_or_generate_unique_unplanned_number(client: TestClient):

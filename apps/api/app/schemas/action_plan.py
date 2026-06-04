@@ -9,6 +9,7 @@ from app.schemas.base import BaseResponse
 
 class ActionPlanFields(BaseModel):
     audit_id: int
+    observation_id: int | None = None
     location_id: int
     root_cause_id: int | None = None
     observation_heading: str

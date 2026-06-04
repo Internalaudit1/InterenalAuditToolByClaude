@@ -53,11 +53,12 @@ class User(BaseModel):
 
     role_links: Mapped[list["UserRole"]] = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
-    attachments: Mapped[list["Attachment"]] = relationship("Attachment", back_populates="uploaded_by")
-    notifications: Mapped[list["Notification"]] = relationship("Notification", back_populates="user")
+    attachments: Mapped[list["Attachment"]] = relationship("Attachment", back_populates="uploaded_by", foreign_keys="Attachment.uploaded_by_user_id")
+    notifications: Mapped[list["Notification"]] = relationship("Notification", back_populates="user", foreign_keys="Notification.user_id")
     designation: Mapped["Designation | None"] = relationship("Designation", back_populates="users")
     company: Mapped["Company | None"] = relationship("Company", back_populates="users")
     location: Mapped["Location | None"] = relationship("Location", back_populates="users")
+    linked_auditee_records: Mapped[list["Auditee"]] = relationship("Auditee", back_populates="linked_user", foreign_keys="Auditee.linked_user_id")
 
 
 class UserRole(Base):

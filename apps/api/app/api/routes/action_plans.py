@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.auth import CurrentUser, require_permissions
 from app.api.deps.common import get_list_query
+from app.core.exceptions import NotFoundException
 from app.db.session import get_db
 from app.models.support import Attachment
 from app.schemas.action_plan import (
@@ -28,6 +29,19 @@ from app.services.file_storage import file_storage
 from app.services.management_review import management_review_service
 
 router = APIRouter(prefix="/action-plans", tags=["action plans"])
+
+
+def _attachment_file_response(attachment: Attachment, *, inline: bool = False) -> FileResponse:
+    path = Path(attachment.storage_path)
+    if not path.exists():
+        raise NotFoundException("Stored document file not found.")
+    if inline:
+        return FileResponse(
+            path=str(path),
+            media_type=attachment.content_type,
+            headers={"Content-Disposition": f'inline; filename="{attachment.file_name}"'},
+        )
+    return FileResponse(path=str(path), filename=attachment.file_name, media_type=attachment.content_type)
 
 
 def _management_review_response(review) -> ManagementReviewResponse:
@@ -56,7 +70,7 @@ def list_action_plans(
     location_id: int | None = Query(None),
     auditor_status: str | None = Query(None),
     auditee_status: str | None = Query(None),
-    _: CurrentUser = Depends(require_permissions("action_plans:view")),
+    current_user: CurrentUser = Depends(require_permissions("action_plans:view")),
     db: Session = Depends(get_db),
 ):
     filters = {}
@@ -69,7 +83,7 @@ def list_action_plans(
     if auditee_status:
         filters["auditee_status"] = auditee_status
     query.filters = filters or None
-    return action_plan_service.list(db, query)
+    return action_plan_service.list(db, query, current_user)
 
 
 @router.get("/summary")
@@ -85,10 +99,10 @@ def action_plan_summary(
 @router.get("/{action_plan_id}", response_model=ActionPlanResponse)
 def get_action_plan(
     action_plan_id: int,
-    _: CurrentUser = Depends(require_permissions("action_plans:view")),
+    current_user: CurrentUser = Depends(require_permissions("action_plans:view")),
     db: Session = Depends(get_db),
 ):
-    return action_plan_service.get(db, action_plan_id)
+    return action_plan_service.get(db, action_plan_id, current_user)
 
 
 @router.post("", response_model=ActionPlanResponse)
@@ -240,15 +254,24 @@ async def upload_attachment(
     current_user: CurrentUser = Depends(require_permissions("action_plans:respond")),
     db: Session = Depends(get_db),
 ):
-    stored_name, size = await file_storage.save(file)
+    action_plan = action_plan_service.get(db, action_plan_id, current_user)
+    audit_reference = action_plan.audit_number or f"id-{action_plan.audit_id}"
+    action_reference = action_plan.action_plan_id or f"id-{action_plan.id}"
+    stored = await file_storage.save_for_context(
+        file,
+        f"audit-{audit_reference}",
+        "action-plans",
+        action_reference,
+        "attachments",
+    )
     attachment = action_plan_service.attach_file(
         db,
         action_plan_id=action_plan_id,
-        file_name=file.filename or stored_name,
-        stored_name=stored_name,
+        file_name=file.filename or stored.stored_name,
+        stored_name=stored.stored_name,
         content_type=file.content_type or "application/octet-stream",
-        file_size=size,
-        storage_path=str(Path(file_storage.root) / stored_name),
+        file_size=stored.size,
+        storage_path=stored.storage_path,
         uploaded_by_user_id=current_user.id,
         actor_name=current_user.full_name,
     )
@@ -263,4 +286,18 @@ def download_attachment(
     db: Session = Depends(get_db),
 ):
     attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id, Attachment.is_deleted.is_(False)))
-    return FileResponse(path=attachment.storage_path, filename=attachment.file_name, media_type=attachment.content_type)
+    if not attachment:
+        raise NotFoundException("Attachment not found.")
+    return _attachment_file_response(attachment)
+
+
+@router.get("/attachments/{attachment_id}/view")
+def view_attachment(
+    attachment_id: int,
+    _: CurrentUser = Depends(require_permissions("action_plans:view")),
+    db: Session = Depends(get_db),
+):
+    attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id, Attachment.is_deleted.is_(False)))
+    if not attachment:
+        raise NotFoundException("Attachment not found.")
+    return _attachment_file_response(attachment, inline=True)

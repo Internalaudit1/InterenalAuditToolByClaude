@@ -110,6 +110,76 @@ def test_validate_resolves_state_and_city_foreign_keys(client: TestClient):
     assert any("State with code 'NOPE' was not found" in error["message"] for error in city_response.json()["errors"])
 
 
+def test_template_generation_for_linked_location_master(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+
+    response = client.get("/api/v1/imports/master/locations/template", headers=headers)
+
+    assert response.status_code == 200
+    workbook = load_workbook(BytesIO(response.content))
+    assert "Reference_Values" in workbook.sheetnames
+    assert [cell.value for cell in workbook["Data_Entry"][1]][:8] == [
+        "sector",
+        "division_id",
+        "division_description",
+        "country_code",
+        "state_code",
+        "city_code",
+        "company_name",
+        "location_code",
+    ]
+
+
+def test_validate_company_import_rejects_invalid_geography_chain(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+    country = client.post("/api/v1/master/countries", headers=headers, json={"code": "UK", "name": "United Kingdom"}).json()
+    state = client.post("/api/v1/master/states", headers=headers, json={"country_id": country["id"], "code": "LDN", "name": "London"}).json()
+    client.post("/api/v1/master/cities", headers=headers, json={"state_id": state["id"], "code": "LON", "name": "London"})
+    content = workbook_bytes(
+        ["name", "country_code", "state_code", "city_code", "pan", "gst_no", "is_active"],
+        [["Mismatch Ltd", "IN", "LDN", "LON", "AAACM1234Q", "29AAACM1234Q1Z2", "TRUE"]],
+    )
+
+    response = upload(client, "/api/v1/imports/master/companies/validate", headers, content)
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["can_commit"] is False
+    assert any("Selected state does not belong to the selected country." in error["message"] for error in payload["errors"])
+
+
+def test_commit_imports_linked_trial_balance(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+    content = workbook_bytes(
+        ["code", "name", "company_name", "amount", "is_active"],
+        [["TB-2026", "FY 2026 Trial Balance", "NHL Limited", 12500.75, "TRUE"]],
+    )
+
+    response = upload(client, "/api/v1/imports/master/trial-balances/commit", headers, content)
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["imported_rows"] == 1
+    list_response = client.get("/api/v1/master/trial-balances?search=TB-2026", headers=headers)
+    assert list_response.status_code == 200
+    assert any(item["code"] == "TB-2026" for item in list_response.json()["items"])
+
+
+def test_validate_task_swap_rejects_same_source_and_target(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+    content = workbook_bytes(
+        ["code", "source_designation_code", "target_designation_code", "max_tasks", "notes", "is_active"],
+        [["SWAP-SELF", "AUD", "AUD", 5, "Invalid self swap", "TRUE"]],
+    )
+
+    response = upload(client, "/api/v1/imports/master/task-swaps/validate", headers, content)
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["can_commit"] is False
+    assert any("Source and target designation must be different." in error["message"] for error in payload["errors"])
+
+
 def test_commit_imports_valid_country_and_rejects_invalid_commit(client: TestClient):
     headers = auth_headers(client, "auditoruser1")
     valid_content = workbook_bytes(["code", "name", "description", "is_active"], [["JP", "Japan", "Japan country", "FALSE"]])

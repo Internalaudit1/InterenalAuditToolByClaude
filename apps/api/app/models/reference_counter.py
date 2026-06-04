@@ -77,8 +77,10 @@ def _is_postgresql(connection) -> bool:
 
 
 from app.models.action_plan import ActionPlan, ActionPlanRevision  # noqa: E402
-from app.models.audit import Audit, AuditPlan  # noqa: E402
+from app.models.audit import Audit, AuditPlan, Observation  # noqa: E402
+from app.models.engagement import EngagementPlan  # noqa: E402
 from app.models.support import Attachment  # noqa: E402
+from app.models.workpaper import EvidenceRegister, Workpaper  # noqa: E402
 
 
 @event.listens_for(AuditPlan, "before_insert")
@@ -90,6 +92,18 @@ def generate_audit_plan_number(_mapper, connection, target: AuditPlan) -> None:
         entity_name="audit_number",
         prefix="AUD",
         ref_year=_extract_year(target.start_date),
+    )
+
+
+@event.listens_for(EngagementPlan, "before_insert")
+def generate_engagement_code(_mapper, connection, target: EngagementPlan) -> None:
+    if _is_postgresql(connection):
+        return
+    target.engagement_code = _next_business_reference(
+        connection,
+        entity_name="engagement_plan",
+        prefix="ENG",
+        ref_year=_extract_year(target.planned_start_date),
     )
 
 
@@ -127,6 +141,20 @@ def generate_action_plan_references(_mapper, connection, target: ActionPlan) -> 
     target.observation_number = _next_business_reference(connection, entity_name="observation", prefix="OBS", ref_year=ref_year)
 
 
+@event.listens_for(Observation, "before_insert")
+def generate_observation_number(_mapper, connection, target: Observation) -> None:
+    if _is_postgresql(connection):
+        return
+    if _normalize_text(target.observation_number):
+        return
+    target.observation_number = _next_business_reference(
+        connection,
+        entity_name="observation",
+        prefix="OBS",
+        ref_year=datetime.now(UTC).year,
+    )
+
+
 @event.listens_for(ActionPlanRevision, "before_insert")
 def generate_revision_response_code(_mapper, connection, target: ActionPlanRevision) -> None:
     if _is_postgresql(connection):
@@ -151,5 +179,33 @@ def generate_attachment_evidence_code(_mapper, connection, target: Attachment) -
         connection,
         entity_name="attachment",
         prefix="EVD",
+        ref_year=datetime.now(UTC).year,
+    )
+
+
+@event.listens_for(Workpaper, "before_insert")
+def generate_workpaper_code(_mapper, connection, target: Workpaper) -> None:
+    if _is_postgresql(connection):
+        return
+    if _normalize_text(target.workpaper_code):
+        return
+    target.workpaper_code = _next_business_reference(
+        connection,
+        entity_name="workpaper",
+        prefix="WP",
+        ref_year=datetime.now(UTC).year,
+    )
+
+
+@event.listens_for(EvidenceRegister, "before_insert")
+def generate_evidence_register_code(_mapper, connection, target: EvidenceRegister) -> None:
+    if _is_postgresql(connection):
+        return
+    if _normalize_text(target.evidence_code):
+        return
+    target.evidence_code = _next_business_reference(
+        connection,
+        entity_name="evidence_register",
+        prefix="EVR",
         ref_year=datetime.now(UTC).year,
     )

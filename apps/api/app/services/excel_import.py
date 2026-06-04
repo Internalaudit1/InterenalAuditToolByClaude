@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Any
 
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.enums import ActivityAction
 from app.core.exceptions import NotFoundException
 from app.core.permissions import MASTER_RESOURCE_MAP
+from app.models import City, Location, State, TrialBalance
 from app.schemas.imports import ImportCommitResponse, ImportRowError, ImportValidationResponse
 from app.schemas.master import MasterRecordCreate
 from app.services.activity_log import activity_log_service
@@ -109,6 +111,7 @@ class MasterExcelImportService:
             )
 
         self._apply_duplicate_checks(db, spec, rows)
+        self._apply_business_rule_checks(db, spec, rows)
         return self._build_result(spec, rows, file_level_errors)
 
     def commit_workbook(
@@ -272,6 +275,16 @@ class MasterExcelImportService:
                 )
             return integer_value
 
+        if column.data_type == "decimal":
+            try:
+                if isinstance(value, bool):
+                    raise InvalidOperation
+                decimal_value = Decimal(str(value))
+            except (InvalidOperation, ValueError):
+                errors.append(ImportRowError(row_number=row_number, field=column.header, value=raw_value, message=f"{column.header} must be a valid number."))
+                return None
+            return decimal_value
+
         if column.data_type == "boolean":
             if isinstance(value, bool):
                 return value
@@ -346,6 +359,84 @@ class MasterExcelImportService:
                                 message=f"Value '{value}' already exists in {spec.display_name}. Phase 1 import is insert-only.",
                             )
                         )
+
+    def _apply_business_rule_checks(self, db: Session, spec: MasterImportSpec, rows: list[ParsedRow]) -> None:
+        for row in rows:
+            if row.errors:
+                continue
+            if spec.resource in {"companies", "locations"}:
+                self._validate_geography_chain(db, row)
+            if spec.resource == "process-location-mappings":
+                self._validate_process_location_mapping(db, row)
+            if spec.resource == "task-swaps":
+                self._validate_task_swap(row)
+
+    def _validate_geography_chain(self, db: Session, row: ParsedRow) -> None:
+        country_id = row.data.get("country_id")
+        state_id = row.data.get("state_id")
+        city_id = row.data.get("city_id")
+        if country_id and state_id:
+            state_country_id = db.scalar(select(State.country_id).where(State.id == state_id, State.is_deleted.is_(False)))
+            if state_country_id != country_id:
+                row.errors.append(
+                    ImportRowError(
+                        row_number=row.row_number,
+                        field="state_code",
+                        value=row.raw_values.get("state_code"),
+                        message="Selected state does not belong to the selected country.",
+                    )
+                )
+        if state_id and city_id:
+            city_state_id = db.scalar(select(City.state_id).where(City.id == city_id, City.is_deleted.is_(False)))
+            if city_state_id != state_id:
+                row.errors.append(
+                    ImportRowError(
+                        row_number=row.row_number,
+                        field="city_code",
+                        value=row.raw_values.get("city_code"),
+                        message="Selected city does not belong to the selected state.",
+                    )
+                )
+
+    def _validate_process_location_mapping(self, db: Session, row: ParsedRow) -> None:
+        location_id = row.data.get("location_id")
+        company_id = row.data.get("company_id")
+        trial_balance_id = row.data.get("trial_balance_id")
+        if location_id and company_id:
+            location_company_id = db.scalar(select(Location.company_id).where(Location.id == location_id, Location.is_deleted.is_(False)))
+            if location_company_id != company_id:
+                row.errors.append(
+                    ImportRowError(
+                        row_number=row.row_number,
+                        field="company_name",
+                        value=row.raw_values.get("company_name"),
+                        message="Selected location does not belong to the selected company.",
+                    )
+                )
+        if trial_balance_id and company_id:
+            trial_balance_company_id = db.scalar(select(TrialBalance.company_id).where(TrialBalance.id == trial_balance_id, TrialBalance.is_deleted.is_(False)))
+            if trial_balance_company_id and trial_balance_company_id != company_id:
+                row.errors.append(
+                    ImportRowError(
+                        row_number=row.row_number,
+                        field="trial_balance_code",
+                        value=row.raw_values.get("trial_balance_code"),
+                        message="Selected trial balance does not belong to the selected company.",
+                    )
+                )
+
+    def _validate_task_swap(self, row: ParsedRow) -> None:
+        source_id = row.data.get("source_designation_id")
+        target_id = row.data.get("target_designation_id")
+        if source_id and target_id and source_id == target_id:
+            row.errors.append(
+                ImportRowError(
+                    row_number=row.row_number,
+                    field="target_designation_code",
+                    value=row.raw_values.get("target_designation_code"),
+                    message="Source and target designation must be different.",
+                )
+            )
 
     def _build_result(self, spec: MasterImportSpec, rows: list[ParsedRow], file_errors: list[ImportRowError]) -> ValidationResult:
         row_errors = [error for row in rows for error in row.errors]

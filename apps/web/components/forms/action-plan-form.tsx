@@ -3,10 +3,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { PageShell } from "@/components/layout/page-shell";
+import { RichTextEditor } from "@/components/forms/rich-text-editor";
 import { apiFetch } from "@/lib/api";
 
 const schema = z.object({
@@ -47,6 +48,7 @@ export function ActionPlanForm() {
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -211,11 +213,34 @@ export function ActionPlanForm() {
           </label>
           <label className="space-y-2 text-sm font-semibold md:col-span-3">
             <span>Detailed Observation</span>
-            <textarea className="field min-h-32" {...register("detailed_observation")} />
+            <Controller
+              name="detailed_observation"
+              control={control}
+              render={({ field }) => (
+                <RichTextEditor
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  placeholder="Capture the detailed observation"
+                  minHeightClass="min-h-32"
+                />
+              )}
+            />
+            {errors.detailed_observation ? <p className="text-sm text-ember">{errors.detailed_observation.message}</p> : null}
           </label>
           <label className="space-y-2 text-sm font-semibold md:col-span-3">
             <span>Auditor Implementation Remarks</span>
-            <textarea className="field min-h-28" {...register("auditor_implementation_remarks")} />
+            <Controller
+              name="auditor_implementation_remarks"
+              control={control}
+              render={({ field }) => (
+                <RichTextEditor
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  placeholder="Add auditor implementation remarks"
+                  minHeightClass="min-h-28"
+                />
+              )}
+            />
           </label>
         </div>
         {error ? <div className="rounded-2xl bg-ember/10 px-4 py-3 text-sm text-ember">{error}</div> : null}
