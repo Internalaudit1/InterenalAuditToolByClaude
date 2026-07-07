@@ -24,7 +24,14 @@ from app.schemas.planning import (
     ProcessRiskMappingResponse,
     ProcessRiskMappingUpdate,
 )
+from app.schemas.audit_allocation import (
+    AllocatablePlanResponse,
+    AuditAllocationCreate,
+    AuditAllocationResponse,
+    AuditAllocationUpdate,
+)
 from app.services.audit import audit_service
+from app.services.audit_allocation import audit_allocation_service
 from app.services.planning import planning_service
 
 router = APIRouter(prefix="/planning", tags=["planning"])
@@ -373,3 +380,85 @@ def initiate_audit_plan(
     entity = audit_service.initiate_audit_from_plan(db, audit_plan_id, payload, current_user.full_name, current_user.id)
     db.commit()
     return entity
+
+
+@router.get("/audit-allocations", response_model=PaginatedResponse[AuditAllocationResponse])
+def list_audit_allocations(
+    query: Annotated[ListQuery, Depends(get_list_query)],
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:view")),
+    db: Session = Depends(get_db),
+):
+    return audit_allocation_service.list(db, query, current_user)
+
+
+@router.get("/audit-allocations/available-plans", response_model=list[AllocatablePlanResponse])
+def list_allocatable_plans(
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:manage")),
+    db: Session = Depends(get_db),
+):
+    return audit_allocation_service.available_plans(db, current_user)
+
+
+@router.get("/audit-allocations/{allocation_id}", response_model=AuditAllocationResponse)
+def get_audit_allocation(
+    allocation_id: int,
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:view")),
+    db: Session = Depends(get_db),
+):
+    return audit_allocation_service.get(db, allocation_id, current_user)
+
+
+@router.post("/audit-allocations", response_model=AuditAllocationResponse)
+def create_audit_allocation(
+    payload: AuditAllocationCreate,
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:manage")),
+    db: Session = Depends(get_db),
+):
+    allocation = audit_allocation_service.create(db, payload, current_user.full_name, current_user.id)
+    db.commit()
+    return allocation
+
+
+@router.put("/audit-allocations/{allocation_id}", response_model=AuditAllocationResponse)
+def update_audit_allocation(
+    allocation_id: int,
+    payload: AuditAllocationUpdate,
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:manage")),
+    db: Session = Depends(get_db),
+):
+    allocation = audit_allocation_service.update(db, allocation_id, payload, current_user.full_name, current_user.id)
+    db.commit()
+    return allocation
+
+
+@router.post("/audit-allocations/{allocation_id}/approve", response_model=AuditAllocationResponse)
+def approve_audit_allocation(
+    allocation_id: int,
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:approve")),
+    db: Session = Depends(get_db),
+):
+    allocation = audit_allocation_service.approve(db, allocation_id, current_user.full_name, current_user.id)
+    db.commit()
+    return allocation
+
+
+@router.post("/audit-allocations/{allocation_id}/initiate-audit", response_model=AuditResponse)
+def initiate_audit_from_allocation(
+    allocation_id: int,
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:approve")),
+    db: Session = Depends(get_db),
+):
+    audit = audit_allocation_service.initiate_audit(db, allocation_id, current_user.full_name, current_user.id)
+    db.commit()
+    return audit
+
+
+@router.delete("/audit-allocations/{allocation_id}", response_model=MessageResponse)
+def cancel_audit_allocation(
+    allocation_id: int,
+    current_user: CurrentUser = Depends(require_permissions("audit_allocations:manage")),
+    db: Session = Depends(get_db),
+):
+    audit_allocation_service.cancel(db, allocation_id, current_user.full_name, current_user.id)
+    db.commit()
+    return MessageResponse(message="Audit allocation cancelled.")

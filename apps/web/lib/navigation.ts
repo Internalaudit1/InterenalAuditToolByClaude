@@ -16,7 +16,8 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Key ERM Risks", href: "/planning/erm-risks", permissions: ["planning:manage"] },
       { label: "Key Business Initiatives", href: "/planning/business-initiatives", permissions: ["planning:manage"] },
       { label: "Overall Assessment", href: "/planning/overall-assessments", permissions: ["planning:manage"] },
-      { label: "Audit Plans", href: "/planning/audit-plans", permissions: ["planning:view"] }
+      { label: "Audit Plans", href: "/planning/audit-plans", permissions: ["planning:view"] },
+      { label: "Audit Allocation", href: "/audit-allocations", permissions: ["audit_allocations:view"] }
     ]
   },
   { label: "Engagement Planning", href: "/engagement-plans", permissions: ["engagement_plans:view"] },
@@ -50,6 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Process", href: "/masters/processes", permissions: ["masters:view"] },
       { label: "Location", href: "/masters/locations", permissions: ["masters:view"] },
       { label: "Process Location Mapping", href: "/masters/process-location-mappings", permissions: ["masters:view"] },
+      { label: "Audit Universe Setup", href: "/masters/audit-universe-setup", permissions: ["masters:manage"] },
       { label: "Risk Type", href: "/masters/risk-types", permissions: ["masters:view"] },
       { label: "Root Cause", href: "/masters/root-causes", permissions: ["masters:view"] },
       { label: "Observation Grading", href: "/masters/observation-gradings", permissions: ["masters:view"] },
@@ -105,6 +107,7 @@ export function isRouteAllowed(pathname: string, permissions: string[]) {
 export function defaultWorkspacePath(permissions: string[]) {
   if (permissions.includes("dashboard:view")) return "/dashboard";
   if (permissions.includes("planning:view")) return "/planning/audit-plans";
+  if (permissions.includes("audit_allocations:view")) return "/audit-allocations";
   if (permissions.includes("engagement_plans:view")) return "/engagement-plans";
   if (permissions.includes("audits:view")) return "/audits";
   if (permissions.includes("workpapers:view")) return "/workpapers";

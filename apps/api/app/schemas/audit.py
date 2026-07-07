@@ -11,13 +11,17 @@ class AuditPlanFields(BaseModel):
     audit_name: str
     company_id: int
     location_id: int
-    period_type: str
-    period_value: str
+    period_type: str | None = None
+    period_value: str | None = None
     fiscal_year: str
-    start_date: date
-    end_date: date
+    serial_no: int | None = None
+    audit_area: str | None = None
+    caro_status: str | None = None
+    audit_scope_type: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
     planned_flag: bool = True
-    criticality: str
+    criticality: str | None = None
     audit_owner_id: int | None = None
     junior_auditor_1_id: int | None = None
     junior_auditor_2_id: int | None = None
@@ -37,6 +41,10 @@ class AuditPlanUpdate(BaseModel):
     period_type: str | None = None
     period_value: str | None = None
     fiscal_year: str | None = None
+    serial_no: int | None = None
+    audit_area: str | None = None
+    caro_status: str | None = None
+    audit_scope_type: str | None = None
     start_date: date | None = None
     end_date: date | None = None
     planned_flag: bool | None = None
@@ -51,7 +59,7 @@ class AuditPlanResponse(BaseResponse, AuditPlanFields):
     audit_number: str
     period_type: str | None = None
     period_value: str | None = None
-    quarter: str
+    quarter: str | None = None
     audit_owner_name: str | None = None
     junior_auditor_1_name: str | None = None
     junior_auditor_2_name: str | None = None

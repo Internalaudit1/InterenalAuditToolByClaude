@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -24,14 +24,18 @@ class AuditPlan(BaseModel):
     audit_name: Mapped[str] = mapped_column(String(255), nullable=False)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
     location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), nullable=False)
-    quarter: Mapped[str] = mapped_column(String(10), nullable=False)
+    quarter: Mapped[str | None] = mapped_column(String(10), nullable=True)
     period_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     period_value: Mapped[str | None] = mapped_column(String(50), nullable=True)
     fiscal_year: Mapped[str] = mapped_column(String(20), nullable=False)
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    serial_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    audit_area: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    caro_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    audit_scope_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     planned_flag: Mapped[bool] = mapped_column(default=True, nullable=False)
-    criticality: Mapped[str] = mapped_column(String(50), nullable=False)
+    criticality: Mapped[str | None] = mapped_column(String(50), nullable=True)
     audit_owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     junior_auditor_1_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     junior_auditor_2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -51,6 +55,7 @@ class AuditPlan(BaseModel):
     updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
     approved_by: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by_user_id])
     audit: Mapped["Audit | None"] = relationship("Audit", back_populates="audit_plan", uselist=False)
+    allocation: Mapped["AuditAllocation | None"] = relationship("AuditAllocation", back_populates="audit_plan", uselist=False)
     process_risk_mappings: Mapped[list["ProcessRiskMapping"]] = relationship(
         "ProcessRiskMapping",
         back_populates="audit_plan",
@@ -361,3 +366,72 @@ class OverallAssessment(BaseModel):
 
     audit_plan: Mapped[AuditPlan] = relationship(AuditPlan, back_populates="overall_assessments")
     location: Mapped["Location"] = relationship("Location")
+
+
+class AuditAllocation(BaseModel):
+    __tablename__ = "audit_allocations"
+    __table_args__ = (
+        CheckConstraint("end_date >= start_date", name="ck_audit_allocations_date_range"),
+        CheckConstraint(
+            "status IN ('Draft', 'Allocated', 'Initiated', 'Cancelled')",
+            name="ck_audit_allocations_status_valid",
+        ),
+        UniqueConstraint("audit_plan_id", name="uq_audit_allocations_audit_plan"),
+        Index("ix_audit_allocations_status", "status"),
+    )
+
+    audit_plan_id: Mapped[int] = mapped_column(ForeignKey("audit_plans.id"), nullable=False)
+    allocation_code: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    lead_auditor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    junior_auditor_1_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    junior_auditor_2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    mentor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    auditee_spoc_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    auditee_spoc_auditee_id: Mapped[int | None] = mapped_column(ForeignKey("auditees.id"), nullable=True)
+    period_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    period_value: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="Draft", nullable=False)
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    audit_id: Mapped[int | None] = mapped_column(ForeignKey("audits.id"), nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+
+    audit_plan: Mapped["AuditPlan"] = relationship("AuditPlan", back_populates="allocation")
+    audit: Mapped["Audit | None"] = relationship("Audit", foreign_keys=[audit_id])
+    lead_auditor: Mapped["User"] = relationship("User", foreign_keys=[lead_auditor_user_id])
+    junior_auditor_1: Mapped["User | None"] = relationship("User", foreign_keys=[junior_auditor_1_id])
+    junior_auditor_2: Mapped["User | None"] = relationship("User", foreign_keys=[junior_auditor_2_id])
+    mentor: Mapped["User | None"] = relationship("User", foreign_keys=[mentor_user_id])
+    auditee_spoc: Mapped["User | None"] = relationship("User", foreign_keys=[auditee_spoc_user_id])
+    auditee_spoc_auditee: Mapped["Auditee | None"] = relationship("Auditee", foreign_keys=[auditee_spoc_auditee_id])
+    approved_by: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by_user_id])
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_user_id])
+
+    @property
+    def audit_plan_number(self) -> str | None:
+        return self.audit_plan.audit_number if self.audit_plan else None
+
+    @property
+    def audit_plan_name(self) -> str | None:
+        return self.audit_plan.audit_name if self.audit_plan else None
+
+    @property
+    def lead_auditor_name(self) -> str | None:
+        return self.lead_auditor.full_name if self.lead_auditor else None
+
+    @property
+    def junior_auditor_1_name(self) -> str | None:
+        return self.junior_auditor_1.full_name if self.junior_auditor_1 else None
+
+    @property
+    def junior_auditor_2_name(self) -> str | None:
+        return self.junior_auditor_2.full_name if self.junior_auditor_2 else None
+
+    @property
+    def mentor_name(self) -> str | None:
+        return self.mentor.full_name if self.mentor else None

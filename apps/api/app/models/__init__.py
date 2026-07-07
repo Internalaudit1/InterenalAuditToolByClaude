@@ -1,5 +1,5 @@
 from app.models.action_plan import ActionPlan, ActionPlanRevision
-from app.models.audit import Audit, AuditActivity, AuditEvent, AuditMembership, AuditPlan, BusinessInitiative, ERMRisk, Observation, OverallAssessment, ProcessRiskMapping
+from app.models.audit import Audit, AuditActivity, AuditAllocation, AuditEvent, AuditMembership, AuditPlan, BusinessInitiative, ERMRisk, Observation, OverallAssessment, ProcessRiskMapping
 from app.models.engagement import EngagementDocument, EngagementKickoffChecklist, EngagementPlan, EngagementResource
 from app.models.auth import Permission, RefreshToken, Role, User, UserRole
 from app.models.master import (
@@ -34,6 +34,7 @@ __all__ = [
     "Attachment",
     "Audit",
     "AuditActivity",
+    "AuditAllocation",
     "AuditEscalation",
     "Auditee",
     "AuditEvent",

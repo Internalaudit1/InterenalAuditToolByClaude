@@ -182,3 +182,20 @@ class ReportType(str, Enum):
     FOLLOW_UP = "Follow Up Report"
     DATA_TRACKER = "Data Tracker Report"
     ACTIVITY = "Activity Report"
+
+
+class CaroStatus(str, Enum):
+    CARO = "CARO"
+    NON_CARO = "Non-CARO"
+
+
+class AuditScopeType(str, Enum):
+    INTERNAL = "Internal"
+    EXTERNAL = "External"
+
+
+class AllocationStatus(str, Enum):
+    DRAFT = "Draft"
+    ALLOCATED = "Allocated"
+    INITIATED = "Initiated"
+    CANCELLED = "Cancelled"
