@@ -17,6 +17,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Key Business Initiatives", href: "/planning/business-initiatives", permissions: ["planning:manage"] },
       { label: "Overall Assessment", href: "/planning/overall-assessments", permissions: ["planning:manage"] },
       { label: "Audit Plans", href: "/planning/audit-plans", permissions: ["planning:view"] },
+      { label: "Import Audit Plan", href: "/audit-plan-import", permissions: ["planning:manage"] },
       { label: "Audit Allocation", href: "/audit-allocations", permissions: ["audit_allocations:view"] }
     ]
   },
