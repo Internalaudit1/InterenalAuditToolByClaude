@@ -268,4 +268,145 @@ class AuditPlanImportService:
         return buffer.getvalue()
 
 
+    # ---------- legacy (flat monthly sheet) import ----------
+    LEGACY_HEADER_KEYS = {
+        "area": ("audit area",),
+        "name": ("unit name", "audit name"),
+        "period": ("qtr", "period"),
+        "executor": ("executor",),
+        "mentor": ("mentor",),
+        "spoc": ("spoc",),
+        "commencement": ("commencement",),
+        "target": ("target date for release", "fieldwork expected", "tentative target"),
+        "status": ("current audit status",),
+        "remarks": ("remarks",),
+    }
+
+    def _read_legacy(self, content: bytes) -> list[ParsedRow]:
+        try:
+            workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        except Exception as exc:  # noqa: BLE001
+            raise ValidationException("Unable to read the uploaded file. Please upload a valid .xlsx file.") from exc
+        worksheet = workbook.active
+        header_row_idx = None
+        headers: list[str] = []
+        for idx, row in enumerate(worksheet.iter_rows(min_row=1, max_row=15, values_only=True), start=1):
+            cells = [self._norm(c) for c in row]
+            lowered = [c.lower() for c in cells]
+            if any("audit area" == c for c in lowered) and any(("unit name" in c or "audit name" in c) for c in lowered):
+                header_row_idx = idx
+                headers = cells
+                break
+        if header_row_idx is None:
+            raise ValidationException("Legacy header row not found. The sheet must contain 'Audit Area' and 'Audit Name / Unit Name'.")
+
+        def find(substrings: tuple[str, ...]) -> int | None:
+            # Priority by substring order: try the first keyword across all headers before the next.
+            for sub in substrings:
+                for pos, header in enumerate(headers):
+                    if sub in header.lower():
+                        return pos
+            return None
+
+        col_index = {key: find(subs) for key, subs in self.LEGACY_HEADER_KEYS.items()}
+        rows: list[ParsedRow] = []
+        for idx, row in enumerate(worksheet.iter_rows(min_row=header_row_idx + 1, values_only=True), start=header_row_idx + 1):
+            cells = [self._norm(c) for c in row]
+            record = {key: (cells[pos] if (pos is not None and pos < len(cells)) else "") for key, pos in col_index.items()}
+            if not (record.get("area") or record.get("name")):
+                continue
+            rows.append(ParsedRow(row_number=idx, values=record))
+            if len(rows) >= MAX_ROWS:
+                break
+        return rows
+
+    def _legacy_remarks(self, v: dict) -> str | None:
+        parts = []
+        for label, key in (("Executor", "executor"), ("Mentor", "mentor"), ("Audit SPOC", "spoc"), ("Commencement", "commencement"), ("Target", "target"), ("Status", "status"), ("Remarks", "remarks")):
+            value = v.get(key)
+            if value:
+                parts.append(f"{label}: {value}")
+        return " | ".join(parts) if parts else None
+
+    def _validate_legacy(self, db: Session, content: bytes, company_id: int, location_id: int, fiscal_year: str) -> tuple[list[dict], list[ImportRowError], int]:
+        header_errors: list[ImportRowError] = []
+        company = db.scalar(select(Company).where(Company.id == company_id, Company.is_deleted.is_(False)))
+        if not company:
+            header_errors.append(ImportRowError(row_number=0, field="company_id", value=company_id, message="Selected company was not found."))
+        location = db.scalar(select(Location).where(Location.id == location_id, Location.is_deleted.is_(False)))
+        if not location:
+            header_errors.append(ImportRowError(row_number=0, field="location_id", value=location_id, message="Selected location was not found."))
+        elif company and location.company_id != company.id:
+            header_errors.append(ImportRowError(row_number=0, field="location_id", value=location_id, message="Selected location does not belong to the selected company."))
+        if not FY_PATTERN.match(fiscal_year or ""):
+            header_errors.append(ImportRowError(row_number=0, field="fiscal_year", value=fiscal_year, message="Fiscal Year must look like 2026-2027."))
+
+        rows = self._read_legacy(content)
+        valid: list[dict] = []
+        errors: list[ImportRowError] = list(header_errors)
+        for row in rows:
+            v = row.values
+            row_errors: list[ImportRowError] = []
+            if not v.get("area"):
+                row_errors.append(ImportRowError(row_number=row.row_number, field="Audit Area", value=None, message="Audit Area is required."))
+            if not v.get("name"):
+                row_errors.append(ImportRowError(row_number=row.row_number, field="Audit Name / Unit Name", value=None, message="Audit Name / Unit Name is required."))
+            if row_errors or header_errors:
+                errors.extend(row_errors)
+                continue
+            valid.append({
+                "audit_name": v["name"],
+                "audit_area": v["area"],
+                "company_id": company_id,
+                "location_id": location_id,
+                "fiscal_year": fiscal_year,
+                "period_value": v.get("period") or None,
+                "criticality": None,
+                "caro_status": None,
+                "audit_scope_type": None,
+                "planned_flag": True,
+                "approval_status": AuditPlanApprovalStatus.DRAFT.value,
+                "remarks": self._legacy_remarks(v),
+            })
+        return valid, errors, len(rows)
+
+    def validate_legacy_workbook(self, db: Session, content: bytes, company_id: int, location_id: int, fiscal_year: str) -> ImportValidationResponse:
+        valid, errors, total = self._validate_legacy(db, content, company_id, location_id, fiscal_year)
+        invalid = total - len(valid)
+        return ImportValidationResponse(
+            resource=RESOURCE,
+            total_rows=total,
+            valid_rows=len(valid),
+            invalid_rows=invalid,
+            can_commit=total > 0 and len(errors) == 0,
+            errors=errors,
+        )
+
+    def commit_legacy_workbook(self, db: Session, content: bytes, company_id: int, location_id: int, fiscal_year: str, actor_name: str, actor_id: int | None) -> ImportCommitResponse:
+        valid, errors, total = self._validate_legacy(db, content, company_id, location_id, fiscal_year)
+        invalid = total - len(valid)
+        validation = ImportValidationResponse(
+            resource=RESOURCE,
+            total_rows=total,
+            valid_rows=len(valid),
+            invalid_rows=invalid,
+            can_commit=total > 0 and len(errors) == 0,
+            errors=errors,
+        )
+        if not validation.can_commit:
+            return ImportCommitResponse(resource=RESOURCE, imported_rows=0, skipped_rows=total, message="Fix the highlighted issues before importing. No rows were saved.", validation=validation)
+        imported = 0
+        for record in valid:
+            record = {**record, "created_by": actor_name, "updated_by": actor_name, "created_by_user_id": actor_id, "updated_by_user_id": actor_id}
+            db.add(AuditPlan(**record))
+            imported += 1
+        db.flush()
+        activity_log_service.log(
+            db, actor_user_id=actor_id, actor_name=actor_name, role=None,
+            module="planning", entity_type="audit_plan", entity_id="bulk-import-legacy",
+            action_type=ActivityAction.IMPORT.value, new_values={"imported_rows": imported, "format": "legacy"},
+        )
+        return ImportCommitResponse(resource=RESOURCE, imported_rows=imported, skipped_rows=0, message=f"Imported {imported} audit plan rows (legacy sheet) as Draft. Approve them to lock.", validation=validation)
+
+
 audit_plan_import_service = AuditPlanImportService()

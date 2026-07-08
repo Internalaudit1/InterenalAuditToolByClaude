@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -158,3 +158,33 @@ async def download_audit_plan_error_report(
     content = await file.read()
     report = audit_plan_import_service.generate_error_report(db, content)
     return _download_response(report, audit_plan_import_service.error_report_filename())
+
+
+@router.post("/audit-plans/legacy/validate", response_model=ImportValidationResponse)
+async def validate_legacy_audit_plan_import(
+    company_id: int = Form(...),
+    location_id: int = Form(...),
+    fiscal_year: str = Form(...),
+    file: UploadFile = File(...),
+    _: CurrentUser = Depends(require_permissions("planning:manage")),
+    db: Session = Depends(get_db),
+) -> ImportValidationResponse:
+    content = await file.read()
+    return audit_plan_import_service.validate_legacy_workbook(db, content, company_id, location_id, fiscal_year)
+
+
+@router.post("/audit-plans/legacy/commit", response_model=None)
+async def commit_legacy_audit_plan_import(
+    company_id: int = Form(...),
+    location_id: int = Form(...),
+    fiscal_year: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(require_permissions("planning:manage")),
+    db: Session = Depends(get_db),
+):
+    content = await file.read()
+    response = audit_plan_import_service.commit_legacy_workbook(db, content, company_id, location_id, fiscal_year, current_user.full_name, current_user.id)
+    if not response.validation.can_commit:
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=jsonable_encoder(response))
+    db.commit()
+    return response
