@@ -27,3 +27,36 @@ class ImportCommitResponse(BaseModel):
     skipped_rows: int
     message: str
     validation: ImportValidationResponse
+
+
+class AuditUniverseCandidate(BaseModel):
+    kind: str
+    action: str
+    name: str
+    code: str | None = None
+    company_name: str | None = None
+    location_name: str | None = None
+    process_name: str | None = None
+    row_count: int = 0
+    source_values: list[str] = []
+
+
+class AuditUniverseValidationResponse(BaseModel):
+    resource: str = "audit-universe"
+    total_rows: int
+    usable_rows: int
+    unresolved_rows: int
+    can_commit: bool
+    summary: dict[str, int]
+    candidates: list[AuditUniverseCandidate]
+    unresolved: list[ImportRowError]
+    warnings: list[str] = []
+
+
+class AuditUniverseCommitResponse(BaseModel):
+    resource: str = "audit-universe"
+    created: dict[str, int]
+    reused: dict[str, int]
+    skipped_rows: int
+    message: str
+    validation: AuditUniverseValidationResponse

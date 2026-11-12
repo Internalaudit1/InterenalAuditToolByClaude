@@ -221,3 +221,91 @@ def test_auditee_cannot_import_master_data(client: TestClient):
 
     assert validate_response.status_code == 403
     assert template_response.status_code == 403
+
+
+def annual_plan_workbook_bytes() -> bytes:
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Sheet1"
+    worksheet.append(["S. No.", "Audit Area", "Audit Name / Unit Name", "Period", "Executor", "Mentor", "Audit SPOC", "Qtr"])
+    worksheet.append([1, "ITGC", "NHL Limited", "FY 26-27", "", "", "Auditor User 1", "Q1"])
+    worksheet.append([2, "Treasury", "Treasury", "FY 26-27", "", "", "Auditor User 1", "Q2"])
+    worksheet.append([3, "Implementation of Audit Tool", "Ravi", "FY 26-27", "", "", "Auditor User 1", "Q3"])
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def test_validate_audit_universe_extracts_reusable_master_candidates(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+
+    response = upload(client, "/api/v1/imports/audit-universe/validate", headers, annual_plan_workbook_bytes(), "annual-plan.xlsx")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["total_rows"] == 3
+    assert payload["usable_rows"] == 2
+    assert payload["unresolved_rows"] == 1
+    assert payload["can_commit"] is True
+    assert payload["summary"]["companies_existing"] == 1
+    assert payload["summary"]["companies_create"] == 1
+    assert payload["summary"]["locations_create"] == 2
+    assert payload["summary"]["processes_create"] == 3
+    assert any(item["kind"] == "process" and item["name"] == "Treasury" for item in payload["candidates"])
+    assert any(error["value"] == "Ravi" for error in payload["unresolved"])
+
+
+def test_audit_universe_template_downloads_approved_plan_format(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+
+    response = client.get("/api/v1/imports/audit-universe/template", headers=headers)
+
+    assert response.status_code == 200
+    workbook = load_workbook(BytesIO(response.content))
+    assert "Annual_Audit_Plan" in workbook.sheetnames
+    assert "Instructions" in workbook.sheetnames
+    assert "Reference_Values" in workbook.sheetnames
+    worksheet = workbook["Annual_Audit_Plan"]
+    assert [cell.value for cell in worksheet[1]][:9] == [
+        "S. No.",
+        "Audit Area",
+        "Audit Name / Unit Name",
+        "Period",
+        "Executor",
+        "Mentor",
+        "Audit SPOC",
+        "Audit Commencement Date",
+        "Qtr",
+    ]
+
+
+def test_commit_audit_universe_creates_idempotent_master_universe(client: TestClient):
+    headers = auth_headers(client, "auditoruser1")
+    content = annual_plan_workbook_bytes()
+
+    response = upload(client, "/api/v1/imports/audit-universe/commit", headers, content, "annual-plan.xlsx")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["created"]["companies"] == 1
+    assert payload["created"]["locations"] == 2
+    assert payload["created"]["processes"] == 3
+    assert payload["created"]["mappings"] == 2
+
+    second_response = upload(client, "/api/v1/imports/audit-universe/commit", headers, content, "annual-plan.xlsx")
+    second_payload = second_response.json()
+
+    assert second_response.status_code == 200
+    assert second_payload["created"]["companies"] == 0
+    assert second_payload["created"]["locations"] == 0
+    assert second_payload["created"]["processes"] == 0
+    assert second_payload["created"]["mappings"] == 0
+    assert second_payload["reused"]["mappings"] == 2
+
+
+def test_auditee_cannot_import_audit_universe(client: TestClient):
+    headers = auth_headers(client, "auditeeuser1")
+
+    response = upload(client, "/api/v1/imports/audit-universe/validate", headers, annual_plan_workbook_bytes(), "annual-plan.xlsx")
+
+    assert response.status_code == 403

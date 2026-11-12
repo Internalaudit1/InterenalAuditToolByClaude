@@ -24,6 +24,39 @@ export type ImportCommitResponse = {
   validation: ImportValidationResponse;
 };
 
+export type AuditUniverseCandidate = {
+  kind: string;
+  action: string;
+  name: string;
+  code?: string | null;
+  company_name?: string | null;
+  location_name?: string | null;
+  process_name?: string | null;
+  row_count: number;
+  source_values: string[];
+};
+
+export type AuditUniverseValidationResponse = {
+  resource: "audit-universe";
+  total_rows: number;
+  usable_rows: number;
+  unresolved_rows: number;
+  can_commit: boolean;
+  summary: Record<string, number>;
+  candidates: AuditUniverseCandidate[];
+  unresolved: ImportRowError[];
+  warnings: string[];
+};
+
+export type AuditUniverseCommitResponse = {
+  resource: "audit-universe";
+  created: Record<string, number>;
+  reused: Record<string, number>;
+  skipped_rows: number;
+  message: string;
+  validation: AuditUniverseValidationResponse;
+};
+
 export const MASTER_IMPORT_RESOURCES = new Set([
   "countries",
   "states",
@@ -73,4 +106,26 @@ export async function commitMasterImport(resource: string, file: File) {
 
 export async function downloadMasterImportErrorReport(resource: string, file: File) {
   return apiDownloadPost(`/imports/master/${resource}/error-report`, `${resource}-import-errors.xlsx`, formDataFor(file));
+}
+
+export async function validateAuditUniverseImport(file: File) {
+  return apiFetch<AuditUniverseValidationResponse>("/imports/audit-universe/validate", {
+    method: "POST",
+    body: formDataFor(file)
+  });
+}
+
+export async function downloadAuditUniverseTemplate() {
+  return apiDownload("/imports/audit-universe/template", "annual-audit-universe-template.xlsx");
+}
+
+export async function commitAuditUniverseImport(file: File) {
+  return apiFetch<AuditUniverseCommitResponse>("/imports/audit-universe/commit", {
+    method: "POST",
+    body: formDataFor(file)
+  });
+}
+
+export async function downloadAuditUniverseErrorReport(file: File) {
+  return apiDownloadPost("/imports/audit-universe/error-report", "audit-universe-import-issues.xlsx", formDataFor(file));
 }
