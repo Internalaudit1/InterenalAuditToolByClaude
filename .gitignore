@@ -25,3 +25,7 @@ storage/uploads/*
 !storage/uploads/.gitkeep
 storage/documents/*
 !storage/documents/.gitkeep
+
+# Office lock files and TypeScript incremental build info
+~$*
+*.tsbuildinfo
