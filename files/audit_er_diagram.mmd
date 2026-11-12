@@ -1,0 +1,321 @@
+erDiagram
+    %% ===== IDENTITY & ACCESS =====
+    USERS {
+        int id PK
+        string username UK
+        string email UK
+        string password_hash
+        int designation_id FK
+        int company_id FK
+        int location_id FK
+    }
+    ROLES {
+        int id PK
+        string code UK
+    }
+    PERMISSIONS {
+        int id PK
+        string code UK
+    }
+    USER_ROLES {
+        int user_id PK_FK
+        int role_id PK_FK
+    }
+    ROLE_PERMISSIONS {
+        int role_id PK_FK
+        int permission_id PK_FK
+    }
+    REFRESH_TOKENS {
+        int id PK
+        int user_id FK
+        string token UK
+    }
+
+    USERS ||--o{ USER_ROLES : has
+    ROLES ||--o{ USER_ROLES : granted_in
+    ROLES ||--o{ ROLE_PERMISSIONS : has
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : in
+    USERS ||--o{ REFRESH_TOKENS : issues
+
+    %% ===== MASTER / REFERENCE =====
+    COUNTRIES { int id PK }
+    STATES { int id PK
+        int country_id FK }
+    CITIES { int id PK
+        int state_id FK }
+    COMPANIES {
+        int id PK
+        int country_id FK
+        int state_id FK
+        int city_id FK
+    }
+    LOCATIONS {
+        int id PK
+        int company_id FK
+        int country_id FK
+        int state_id FK
+        int city_id FK
+    }
+    PROCESSES { int id PK }
+    PROCESS_LOCATION_MAPPINGS {
+        int id PK
+        int process_id FK
+        int location_id FK
+        int company_id FK
+        int trial_balance_id FK
+    }
+    DESIGNATIONS { int id PK }
+    AUDITEES {
+        int id PK
+        int company_id FK
+        int location_id FK
+        int linked_user_id FK
+    }
+    TRIAL_BALANCES { int id PK
+        int company_id FK }
+    OBSERVATION_GRADINGS { int id PK }
+    RISK_TYPES { int id PK }
+    ROOT_CAUSES { int id PK }
+    TASK_SWAP_RULES {
+        int id PK
+        int source_designation_id FK
+        int target_designation_id FK
+    }
+
+    COUNTRIES ||--o{ STATES : has
+    STATES ||--o{ CITIES : has
+    COUNTRIES ||--o{ COMPANIES : located_in
+    COMPANIES ||--o{ LOCATIONS : has
+    COMPANIES ||--o{ TRIAL_BALANCES : has
+    DESIGNATIONS ||--o{ USERS : classifies
+    COMPANIES ||--o{ USERS : employs
+    LOCATIONS ||--o{ USERS : based_at
+    USERS |o--o| AUDITEES : linked_to
+    PROCESSES ||--o{ PROCESS_LOCATION_MAPPINGS : mapped
+    LOCATIONS ||--o{ PROCESS_LOCATION_MAPPINGS : mapped
+    DESIGNATIONS ||--o{ TASK_SWAP_RULES : source
+    DESIGNATIONS ||--o{ TASK_SWAP_RULES : target
+
+    %% ===== PLANNING =====
+    AUDIT_PLANS {
+        int id PK
+        string audit_number UK
+        int company_id FK
+        int location_id FK
+        int audit_owner_id FK
+        int approved_by_user_id FK
+        string approval_status
+    }
+    PROCESS_RISK_MAPPINGS {
+        int id PK
+        int audit_plan_id FK
+        int process_location_mapping_id FK
+        int trial_balance_id FK
+    }
+    ERM_RISKS { int id PK
+        int audit_plan_id FK
+        int process_id FK }
+    BUSINESS_INITIATIVES { int id PK
+        int audit_plan_id FK
+        int owner_user_id FK }
+    OVERALL_ASSESSMENTS { int id PK
+        int audit_plan_id FK
+        int location_id FK }
+
+    COMPANIES ||--o{ AUDIT_PLANS : owns
+    LOCATIONS ||--o{ AUDIT_PLANS : scoped_to
+    AUDIT_PLANS ||--o{ PROCESS_RISK_MAPPINGS : scopes
+    AUDIT_PLANS ||--o{ ERM_RISKS : scopes
+    AUDIT_PLANS ||--o{ BUSINESS_INITIATIVES : scopes
+    AUDIT_PLANS ||--o{ OVERALL_ASSESSMENTS : scopes
+    PROCESS_LOCATION_MAPPINGS ||--o{ PROCESS_RISK_MAPPINGS : rated_in
+
+    %% ===== EXECUTION =====
+    AUDITS {
+        int id PK
+        int audit_plan_id FK
+        string audit_number UK
+        int company_id FK
+        int location_id FK
+        int auditee_spoc_user_id FK
+        int auditee_spoc_auditee_id FK
+        string status
+    }
+    AUDIT_EVENTS { int id PK
+        int audit_id FK }
+    AUDIT_MEMBERSHIPS {
+        int id PK
+        int audit_id FK
+        int user_id FK
+        string role_on_audit
+    }
+    AUDIT_ACTIVITIES {
+        int id PK
+        int audit_id FK
+        int assigned_to_user_id FK
+    }
+    OBSERVATIONS {
+        int id PK
+        string observation_number UK
+        int audit_id FK
+        int activity_id FK
+        int observation_grading_id FK
+        int risk_type_id FK
+        int root_cause_id FK
+        int auditee_id FK
+        int auditee_user_id FK
+        string status
+    }
+
+    AUDIT_PLANS ||--o| AUDITS : instantiates
+    AUDITS ||--o{ AUDIT_EVENTS : logs
+    AUDITS ||--o{ AUDIT_MEMBERSHIPS : staffs
+    USERS ||--o{ AUDIT_MEMBERSHIPS : member_of
+    AUDITS ||--o{ AUDIT_ACTIVITIES : contains
+    USERS ||--o{ AUDIT_ACTIVITIES : assigned
+    AUDITS ||--o{ OBSERVATIONS : produces
+    AUDIT_ACTIVITIES ||--o{ OBSERVATIONS : source_of
+    OBSERVATION_GRADINGS ||--o{ OBSERVATIONS : grades
+    RISK_TYPES ||--o{ OBSERVATIONS : classifies
+    ROOT_CAUSES ||--o{ OBSERVATIONS : explains
+    AUDITEES ||--o{ OBSERVATIONS : responds
+    USERS ||--o{ AUDITS : owns
+
+    %% ===== ENGAGEMENT =====
+    ENGAGEMENT_PLANS {
+        int id PK
+        string engagement_code UK
+        int audit_id FK
+        int company_id FK
+        int location_id FK
+        int lead_auditor_id FK
+        string status
+    }
+    ENGAGEMENT_KICKOFF_CHECKLISTS { int id PK
+        int engagement_plan_id FK }
+    ENGAGEMENT_RESOURCES {
+        int id PK
+        int engagement_plan_id FK
+        int user_id FK
+    }
+    ENGAGEMENT_DOCUMENTS {
+        int id PK
+        int engagement_plan_id FK
+        int document_id FK
+    }
+
+    AUDITS ||--o{ ENGAGEMENT_PLANS : plans
+    ENGAGEMENT_PLANS ||--o{ ENGAGEMENT_KICKOFF_CHECKLISTS : has
+    ENGAGEMENT_PLANS ||--o{ ENGAGEMENT_RESOURCES : allocates
+    USERS ||--o{ ENGAGEMENT_RESOURCES : resourced
+    ENGAGEMENT_PLANS ||--o{ ENGAGEMENT_DOCUMENTS : attaches
+
+    %% ===== WORKPAPERS & EVIDENCE =====
+    WORKPAPERS {
+        int id PK
+        string workpaper_code UK
+        int audit_id FK
+        int activity_id FK
+        int observation_id FK
+        int owner_user_id FK
+        string status
+    }
+    WORKPAPER_VERSIONS {
+        int id PK
+        int workpaper_id FK
+        int document_id FK
+        int version_no
+        string hash_checksum
+    }
+    WORKPAPER_REVIEWS { int id PK
+        int workpaper_id FK
+        int reviewer_user_id FK }
+    EVIDENCE_REGISTER {
+        int id PK
+        string evidence_code UK
+        int audit_id FK
+        int activity_id FK
+        int document_id FK
+    }
+    EVIDENCE_LINKS {
+        int id PK
+        int evidence_id FK
+        string linked_module
+        int linked_record_id
+    }
+
+    AUDITS ||--o{ WORKPAPERS : has
+    AUDIT_ACTIVITIES ||--o{ WORKPAPERS : covers
+    OBSERVATIONS ||--o{ WORKPAPERS : supports
+    WORKPAPERS ||--o{ WORKPAPER_VERSIONS : versions
+    WORKPAPERS ||--o{ WORKPAPER_REVIEWS : reviewed_by
+    AUDITS ||--o{ EVIDENCE_REGISTER : collects
+    EVIDENCE_REGISTER ||--o{ EVIDENCE_LINKS : links
+
+    %% ===== ACTION PLANS =====
+    ACTION_PLANS {
+        int id PK
+        string action_plan_id UK
+        int audit_id FK
+        int observation_id FK
+        int location_id FK
+        int observation_grading_id FK
+        int risk_type_id FK
+        int implementation_owner_user_id FK
+        int assigned_auditor_user_id FK
+        string auditor_status
+        string auditee_status
+    }
+    ACTION_PLAN_REVISIONS {
+        int id PK
+        int action_plan_id FK
+        int file_attachment_id FK
+        string response_code UK
+    }
+
+    OBSERVATIONS ||--o{ ACTION_PLANS : drives
+    AUDITS ||--o{ ACTION_PLANS : under
+    ACTION_PLANS ||--o{ ACTION_PLAN_REVISIONS : revises
+
+    %% ===== SUPPORT =====
+    ATTACHMENTS {
+        int id PK
+        string owner_type
+        int owner_id
+        int uploaded_by_user_id FK
+    }
+    KNOWLEDGE_LIBRARY_ITEMS { int id PK
+        int attachment_id FK }
+    ACTIVITY_LOGS {
+        int id PK
+        int actor_user_id FK
+        string entity_type
+        string entity_id
+    }
+    NOTIFICATIONS { int id PK
+        int user_id FK }
+    NOTIFICATION_OUTBOX { int id PK
+        int notification_id FK }
+    MANAGEMENT_REVIEWS {
+        int id PK
+        int audit_id FK
+        int action_plan_id FK
+        int created_by_user_id FK
+    }
+    BUSINESS_REFERENCE_COUNTERS {
+        int id PK
+        string entity_name
+        int ref_year
+        int last_value
+    }
+
+    ENGAGEMENT_DOCUMENTS }o--|| ATTACHMENTS : refs
+    WORKPAPER_VERSIONS }o--|| ATTACHMENTS : refs
+    EVIDENCE_REGISTER }o--|| ATTACHMENTS : refs
+    ACTION_PLAN_REVISIONS }o--|| ATTACHMENTS : refs
+    KNOWLEDGE_LIBRARY_ITEMS }o--o| ATTACHMENTS : refs
+    USERS ||--o{ NOTIFICATIONS : receives
+    NOTIFICATIONS ||--o{ NOTIFICATION_OUTBOX : dispatched_via
+    AUDITS ||--o{ MANAGEMENT_REVIEWS : reviewed
+    ACTION_PLANS ||--o{ MANAGEMENT_REVIEWS : reviewed
+    USERS ||--o{ ACTIVITY_LOGS : acts
